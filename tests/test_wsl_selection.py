@@ -46,6 +46,7 @@ class WSLSelectionTests(unittest.TestCase):
         flow = Workflow(log=lambda message: None)
         flow.adb_binary, flow.backup, flow.setup, flow.connect = Mock(), Mock(), Mock(), Mock()
         with patch('station_root.workflow.sys.platform', 'win32'), \
+             patch('station_root.workflow.homebrew.resources'), \
              patch('station_root.environment.run_capture', return_value=(1, '', 'Wsl/Service/ExampleFailure')):
             with self.assertRaisesRegex(WSLUnavailable, 'Wsl/Service/ExampleFailure'):
                 flow.install({'distro': 'Ubuntu', 'work': '.'})
