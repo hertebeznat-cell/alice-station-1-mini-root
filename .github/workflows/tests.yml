@@ -21,4 +21,13 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
-      - run: python station_mini_root.py --check-usb usb-report.json
+      - name: Load USB runtime without opening devices
+        shell: python
+        run: |
+          import logging
+          from pathlib import Path
+          from station_mini_root import check_usb
+          logging.basicConfig(level=logging.DEBUG)
+          code = check_usb('usb-report.json')
+          print(Path('usb-report.json').read_text(encoding='utf-8'))
+          raise SystemExit(code)
