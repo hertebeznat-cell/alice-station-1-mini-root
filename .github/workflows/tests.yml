@@ -21,6 +21,12 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+      # Hosted Linux runners have no USB controllers or usbfs directory.
+      # An empty directory lets libusb initialize with zero devices; no device
+      # is created, opened or mocked by this host-runtime check.
+      - name: Prepare empty USB directory on headless Linux runner
+        if: runner.os == 'Linux'
+        run: sudo mkdir -p /dev/bus/usb
       - name: Load USB runtime without opening devices
         shell: python
         env:
