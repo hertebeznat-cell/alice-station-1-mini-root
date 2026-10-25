@@ -1,10 +1,12 @@
-# Station Mini Root 0.3.8
+# Station Mini Root 0.3.9
 
-[Русский](README.md) · [Windows / Linux downloads](https://github.com/hertebeznat-cell/alice-station-1-mini-root/releases/tag/v0.3.8) · [Method](docs/METHOD.md) · [Validation](docs/VALIDATION.md)
+[Русский](README.md) · [Windows / Linux downloads](https://github.com/hertebeznat-cell/alice-station-1-mini-root/releases/tag/v0.3.9) · [Method](docs/METHOD.md) · [Validation](docs/VALIDATION.md)
 
 USB ADB root application for **Yandex Station Mini 1, YNDX-0004 / Amlogic A113X**. English/Russian UI; Windows x64 and Linux x86_64. Windows uses a compatible Debian/Ubuntu WSL builder and can install official Debian when needed.
 
 ## Use
+
+The Windows executable includes libusb and the WinUSB helper; end users do not compile them. If 0.3.8 reports a missing libusb, close it, download 0.3.9 and retry dependency setup. Existing WSL, ADB, workspaces and backups are preserved.
 
 1. Download and extract your platform archive. Run StationMiniRoot.exe on Windows, or `chmod +x StationMiniRoot && ./StationMiniRoot` on Linux.
 2. Click **Install all dependencies**. ADB is detected or downloaded from Google, the Linux builder is prepared, and the matching USB driver/udev rules are configured. Accept native Windows UAC/driver trust prompts yourself.

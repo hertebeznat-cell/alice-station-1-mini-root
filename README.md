@@ -1,10 +1,12 @@
-# Station Mini Root 0.3.8
+# Station Mini Root 0.3.9
 
-[English](README.en.md) · [Скачать Windows / Linux](https://github.com/hertebeznat-cell/alice-station-1-mini-root/releases/tag/v0.3.8) · [Как работает root](docs/METHOD.md) · [Проверки](docs/VALIDATION.md)
+[English](README.en.md) · [Скачать Windows / Linux](https://github.com/hertebeznat-cell/alice-station-1-mini-root/releases/tag/v0.3.9) · [Как работает root](docs/METHOD.md) · [Проверки](docs/VALIDATION.md)
 
 Программа для получения **ADB root на Яндекс Станции Мини первого поколения — YNDX-0004, Amlogic A113X**. Интерфейс на русском и английском. Windows x64 и Linux x86_64; в Windows сборка образа выполняется через WSL.
 
 ## Как пользоваться
+
+**В готовом Windows EXE уже встроены libusb и WinUSB-помощник. Собирать или скачивать их вручную не нужно.** Если версия 0.3.8 сообщает «Не найден libusb», закройте её, скачайте 0.3.9 и повторите установку зависимостей. Существующие WSL, ADB, рабочая папка и бэкапы сохраняются.
 
 1. Скачайте архив своей системы из Releases и распакуйте его. Windows: запустите `StationMiniRoot.exe`. Linux: `chmod +x StationMiniRoot && ./StationMiniRoot`.
 2. Нажмите **«Установить все зависимости»**. Программа найдёт или скачает ADB, выберет совместимый установленный WSL-дистрибутив, при необходимости установит официальный Debian и сборщик. В Linux подготовит инструменты/udev. Запросы Windows UAC и доверия драйверу подтверждаются в системных окнах.
@@ -67,7 +69,7 @@ python scripts/build-app.py
 
 `prepare-homebrew.py` получает закреплённый официальный ARM64 Homebrew 0.4.1 и проверяет размер/SHA-256. Его исходники входят в `alice-homebrew/`; источник — [отдельный проект Homebrew](https://github.com/hertebeznat-cell/alice-homebrew). При сборке из Go-исходников используйте `CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/alice-homebrew-linux-arm64 ./cmd/alice-homebrew` в этой папке, с Go 1.26.5.
 
-Для Windows сначала соберите нативный WinUSB-помощник: [инструкция и полные исходники](native/README.md). Microsoft WDK redistributables получаются отдельно по их условиям. Помощник устанавливает WinUSB только для нужных загрузочного/ADB-интерфейсов; родитель составного устройства и RNDIS не заменяются, проверка подписей Windows не отключается.
+**Только для разработчиков, собирающих приложение из исходников:** для Windows сначала соберите нативный WinUSB-помощник: [инструкция и полные исходники](native/README.md). Microsoft WDK redistributables получаются отдельно по их условиям. Помощник устанавливает WinUSB только для нужных загрузочного/ADB-интерфейсов; родитель составного устройства и RNDIS не заменяются, проверка подписей Windows не отключается.
 
 Офлайн-сборка образа из **своего** полного бэкапа:
 

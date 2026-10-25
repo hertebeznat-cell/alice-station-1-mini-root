@@ -56,7 +56,8 @@ def make_backend():
     except ImportError:
         backend = usb.backend.libusb1.get_backend()
     if backend is None:
-        raise RuntimeError("Не найден libusb. Установите зависимости из README.")
+        raise RuntimeError("Cannot load libusb. Download and extract the latest official application release; "
+                           "the USB library is bundled and does not require compiling a driver helper.")
     # PyUSB caches a native context on first import. Setup may replace the
     # Windows driver afterwards; keep the cached DLL, but enumerate in a new
     # context for each connection attempt. Never reset a context with handles.
