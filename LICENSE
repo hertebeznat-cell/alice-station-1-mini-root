@@ -1,0 +1,36 @@
+Station Mini Root - proprietary source-available terms
+Copyright (c) 2026 TrueKris (hertebeznat-cell). All rights reserved.
+
+These terms apply only to the original Station Mini Root application code and
+documentation, excluding the third-party and separately licensed components below.
+
+You may download, install and run the unmodified official release for personal,
+non-commercial use on devices you own or are authorized to service. You may keep
+the copies needed for installation and backup. No support or warranty is promised.
+
+Reusing or redistributing the original application source, publishing modified
+versions, incorporating the original code into another project, selling copies,
+or other commercial use requires prior written permission from the copyright
+holder. No general open-source license is granted for this original code.
+
+These terms do not restrict rights required by applicable law, GitHub's Terms
+of Service (including viewing/forking within GitHub), or third-party licenses.
+They do not prohibit modification or reverse engineering to the extent necessary
+to exercise the rights granted by applicable LGPL licenses, including debugging
+changes to an LGPL component and rebuilding/replacing that component.
+
+Exceptions and separate licenses:
+- station_root/usb_transport.py: MIT; pyamlboot-derived transport and changes.
+- native/station_driver.c and native/upstream/libwdi*: LGPL-3.0-or-later.
+- libusb and libusb-package: their respective LGPL/Apache terms.
+- alice-homebrew/: the separately published Alice Homebrew project and its
+  component licenses; the root application's restrictions do not relicense it.
+- Third-party notices, dependency licenses and Microsoft redistributable terms
+  under licenses/ retain their original conditions. See THIRD_PARTY.md.
+
+THE ORIGINAL APPLICATION IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE AUTHORS ARE
+NOT LIABLE FOR CLAIMS, DAMAGES OR OTHER LIABILITY ARISING FROM ITS USE.
+
+Permission requests: contact hertebeznat-cell through the project repository.
