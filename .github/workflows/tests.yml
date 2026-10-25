@@ -23,13 +23,24 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - name: Load USB runtime without opening devices
         shell: python
+        env:
+          PYUSB_DEBUG: debug
         run: |
           import logging
           import sys
+          import ctypes
+          import subprocess
+          import libusb_package
           from pathlib import Path
           sys.path.insert(0, str(Path.cwd()))
           from station_mini_root import check_usb
           logging.basicConfig(level=logging.DEBUG)
+          library = libusb_package.get_library_path()
+          print('Packaged library:', library, flush=True)
+          if sys.platform == 'linux':
+              subprocess.run(['ldd', str(library)], check=True)
+              print('USB filesystem present:', Path('/dev/bus/usb').exists(), flush=True)
+          ctypes.CDLL(str(library))
           code = check_usb('usb-report.json')
           print(Path('usb-report.json').read_text(encoding='utf-8'))
           raise SystemExit(code)
