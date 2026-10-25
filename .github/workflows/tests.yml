@@ -25,7 +25,9 @@ jobs:
         shell: python
         run: |
           import logging
+          import sys
           from pathlib import Path
+          sys.path.insert(0, str(Path.cwd()))
           from station_mini_root import check_usb
           logging.basicConfig(level=logging.DEBUG)
           code = check_usb('usb-report.json')
