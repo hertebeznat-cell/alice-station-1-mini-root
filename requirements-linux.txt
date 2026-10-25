@@ -1,0 +1,2 @@
+-r requirements.txt
+ubi-reader==0.8.14

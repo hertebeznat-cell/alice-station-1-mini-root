@@ -1,0 +1,12 @@
+[
+  {
+    "file": "libusb-1.0.26.tar.bz2",
+    "url": "https://github.com/libusb/libusb/releases/download/v1.0.26/libusb-1.0.26.tar.bz2",
+    "sha256": "12ce7a61fc9854d1d2a1ffe095f7b5fac19ddba095c259e6067a46500381b5a5"
+  },
+  {
+    "file": "libwdi-1.5.1.tar.gz",
+    "url": "https://github.com/pbatard/libwdi/archive/refs/tags/v1.5.1.tar.gz",
+    "sha256": "a695e93db0977dfdc5c6a99a4ea91b22f9027547d0177b2a0f3075078643c929"
+  }
+]

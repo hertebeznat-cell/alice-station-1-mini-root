@@ -1,0 +1,6 @@
+#!/bin/sh
+# Alice Homebrew managed startup hook v1
+case "${1:-start}" in
+ start|stop) [ ! -x /data/alice-homebrew/start.sh ] || /data/alice-homebrew/start.sh "$1";;
+esac
+exit 0
