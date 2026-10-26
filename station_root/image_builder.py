@@ -63,6 +63,37 @@ def inspect_layout(source):
 KNOWN_NOUPDATE_SCRIPT = (b'#!/bin/sh\n# disabled by noupdate\n'
                         b'logger -t noupdate "OTA apply blocked" 2>/dev/null\nexit 0\n')
 
+# Confirmed Mini 1 switcher: selects legacy --updatesd or the dedicated updater
+# and its --updater_gateway. Other binaries with this filename are not trusted.
+KNOWN_UPDATER_SWITCHER_SHA256 = "0cc051e648caff435b4bef9d1b310825093ab7ee04ec2db61672f9b7c1fe63cb"
+
+
+def launcher_tasks(value):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "tasks":
+                if not isinstance(child, list) or not all(isinstance(task, dict) for task in child):
+                    raise RuntimeError("Unsupported tasks in launch.json; OTA policy is unknown")
+                yield from child
+            yield from launcher_tasks(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from launcher_tasks(child)
+
+
+def known_updater_switcher(root, task, tasks):
+    if (task.get("name") != "updater_switcher" or
+            task.get("path") != "/system/vendor/quasar/updater_switcher" or
+            task.get("arg") != ["/data/quasar/use_updater", "/system/vendor/quasar/maind",
+                                "/system/vendor/quasar/updater"]):
+        return False
+    if not any(t.get("name") == "maind" and t.get("path") == "/system/vendor/quasar/maind"
+               and t.get("arg") == ["--platformd"] for t in tasks):
+        return False
+    binary = Path(root) / "system/vendor/quasar/updater_switcher"
+    return (not binary.is_symlink() and binary.is_file() and
+            sha256(binary) == KNOWN_UPDATER_SWITCHER_SHA256)
+
 
 def known_noupdate_policy(root, tasks):
     """Recognize the previously installed noupdate patch, not arbitrary absence.
@@ -101,6 +132,15 @@ def disable_ota(root):
     root = Path(root)
     launch = root / "system/vendor/quasar/launch.json"
     data = json.loads(launch.read_text(encoding="utf-8"))
+    tasks = list(launcher_tasks(data))
+    switchers = set()
+    for task in tasks:
+        path = task.get("path", "")
+        if (task.get("name") in {"updater", "updater_switcher"} or
+                isinstance(path, str) and Path(path).name in {"updater", "updater_switcher"}):
+            if not known_updater_switcher(root, task, tasks):
+                raise RuntimeError("Unknown updater task or switcher binary; OTA blocking is not confirmed")
+            switchers.add(id(task))
     removed, retained = [], []
     def visit(value):
         if isinstance(value, dict):
@@ -108,7 +148,7 @@ def disable_ota(root):
                 if key == "tasks" and isinstance(child, list):
                     kept = []
                     for task in child:
-                        if isinstance(task, dict) and (task.get("name") == "updatesd" or
+                        if isinstance(task, dict) and (id(task) in switchers or task.get("name") == "updatesd" or
                                 "--updatesd" in task.get("arg", [])):
                             removed.append(task.get("name", "updatesd"))
                         else:
@@ -138,7 +178,8 @@ def disable_ota(root):
             path.chmod(0o755)
             blocked.append("/" + path.relative_to(root).as_posix())
     return {"removed_tasks": removed, "blocked_entrypoints": blocked,
-            "source_policy": "noupdate-v1" if previous_policy else "stock-updatesd"}
+            "source_policy": ("noupdate-v1" if previous_policy else
+                              "stock-updater-switcher-v1" if switchers else "stock-updatesd")}
 
 
 def patch_adb_activation(content):
@@ -238,6 +279,8 @@ def build(source, public_key, destination, block_updates=True):
         marker = patch_rootfs(root, key_text, block_updates)
         if marker.get("ota_policy", {}).get("source_policy") == "noupdate-v1":
             print("Recognized the existing noupdate patch; preserving and completing the OTA block.", flush=True)
+        if marker.get("ota_policy", {}).get("source_policy") == "stock-updater-switcher-v1":
+            print("Recognized the verified updater_switcher; preserving platformd and other services.", flush=True)
         if marker["source_adb_activation"] == "legacy-persistent":
             print("Распознан прежний патч persistent USB ADB; обновляю ключ и настройки USB/OTA.", flush=True)
         ubifs_path = work / "rootfs.ubifs"

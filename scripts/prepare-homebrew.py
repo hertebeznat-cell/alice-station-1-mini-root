@@ -3,8 +3,8 @@ from pathlib import Path
 import hashlib
 import urllib.request
 root=Path(__file__).resolve().parents[1]
-url="https://github.com/hertebeznat-cell/alice-homebrew/releases/download/v0.5.2/alice-homebrew-linux-arm64"
-expected="f5f103085375eb749ab22edf9e768d8751bfa5c5e5111755275c6e7f41886214"
+url="https://github.com/hertebeznat-cell/alice-homebrew/releases/download/v0.5.3/alice-homebrew-linux-arm64"
+expected="4696427363751ac15f5225f07d48c642f319cb7a5a83a4cf4294cc52e0389ebb"
 size=9830562
 target=root/'alice-homebrew/dist/alice-homebrew-linux-arm64'
 if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest()==expected:

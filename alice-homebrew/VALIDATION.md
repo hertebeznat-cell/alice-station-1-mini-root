@@ -1,3 +1,9 @@
+# Release 0.5.3
+
+See [VALIDATION-0.5.3.md](VALIDATION-0.5.3.md) for targeted runtime cache checks. No device installation or full Homebrew suite was run. Earlier sections refer to historical releases.
+
+---
+
 # Release 0.5.2
 
 See [VALIDATION-0.5.2.md](VALIDATION-0.5.2.md) for targeted TLS checks. No device installation or full Homebrew regression suite was run. The sections below refer to historical releases.

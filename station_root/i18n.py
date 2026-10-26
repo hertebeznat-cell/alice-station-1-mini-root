@@ -2,6 +2,9 @@
 import re
 
 PAIRS = [
+    ("Recognized the verified updater_switcher; preserving platformd and other services.", "Распознан проверенный updater_switcher; сохраняю platformd и остальные службы."),
+    ("Unknown updater task or switcher binary; OTA blocking is not confirmed", "Неизвестная задача обновлений или версия updater_switcher; блокировка OTA не подтверждена"),
+    ("Unsupported tasks in launch.json; OTA policy is unknown", "Неизвестная структура задач launch.json; схема OTA не распознана"),
     ("Update Homebrew only (ADB root)", "Обновить только Homebrew (ADB root)"),
     ("Connect the rooted speaker in normal ADB mode. Only Homebrew will be updated; system firmware and plugin settings are preserved.", "Подключите рутированную колонку в обычном режиме ADB. Обновится только Homebrew; прошивка system и настройки плагинов сохраняются."),
     ("Run dependency setup first; ADB is missing.", "ADB не найден. Сначала выполните установку зависимостей."),

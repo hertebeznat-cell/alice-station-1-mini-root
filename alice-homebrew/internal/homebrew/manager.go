@@ -101,6 +101,7 @@ func NewManager(dir string, hardware, allowLocal bool) (*Manager, error) {
 		ring.Close()
 		return nil, e
 	}
+	m.gc()
 	return m, nil
 }
 func (m *Manager) save() error { return atomicJSON(filepath.Join(m.dir, "state.json"), m.state) }
@@ -440,6 +441,9 @@ func (m *Manager) gc() {
 		if p.Previous != nil {
 			used[p.Previous.SHA256] = true
 		}
+		// Keep the rollback archive, but regenerate its runtime only if needed.
+		// Cleanup is best-effort; a read-only cache must not stop a plugin.
+		_ = cleanRuntimeCache(filepath.Join(m.dir, "plugin-data"), p.Manifest.ID, p.SHA256)
 	}
 	files, _ := os.ReadDir(filepath.Join(m.dir, "packages"))
 	for _, f := range files {
