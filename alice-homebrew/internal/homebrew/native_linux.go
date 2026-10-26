@@ -4,6 +4,7 @@ package homebrew
 
 import (
 	"errors"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,6 +26,8 @@ type NativeRunner struct {
 	pending   string
 	err       error
 	closeOnce sync.Once
+	ringAllowed bool
+	frame []byte
 }
 
 func (r *NativeRunner) Write(b []byte) (int, error) {
@@ -46,6 +49,10 @@ func (r *NativeRunner) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 func (r *NativeRunner) addLine(s string) {
+	if strings.HasPrefix(s, "@alice-ring ") && r.ringAllowed {
+		frame, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(s, "@alice-ring "))
+		if err == nil && len(frame) == 36 { r.frame = frame; return }
+	}
 	if len(s) > 2048 {
 		s = s[:2048]
 	}
@@ -95,10 +102,11 @@ func NewNativeRunner(p *Package, config map[string]any, root string) (PluginRunn
 	cmd.Dir = data
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "HOME=" + data, "TMPDIR=" + data, "ALICE_PLUGIN_ID=" + p.Manifest.ID, "ALICE_PLUGIN_DATA=" + data, "ALICE_CONFIG_PATH=" + configPath, "ALICE_HARDWARE_PATH=" + hardwarePath}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
-	return startNativeProcess(cmd)
+	r, err := startNativeProcess(cmd, Has(p.Manifest, "led.ring"))
+	return r, err
 }
-func startNativeProcess(cmd *exec.Cmd) (*NativeRunner, error) {
-	r := &NativeRunner{cmd: cmd, done: make(chan struct{})}
+func startNativeProcess(cmd *exec.Cmd, ringPermission ...bool) (*NativeRunner, error) {
+	r := &NativeRunner{cmd: cmd, done: make(chan struct{}), ringAllowed: len(ringPermission)>0 && ringPermission[0]}
 	cmd.Stdout = r
 	cmd.Stderr = r
 	if e := cmd.Start(); e != nil {
@@ -123,7 +131,11 @@ func (r *NativeRunner) Tick(_ map[string]any, _ uint32) ([]byte, error) {
 		defer r.mu.Unlock()
 		return nil, fmt.Errorf("native plugin stopped: %w", r.err)
 	default:
-		return nil, nil
+		r.mu.Lock()
+		frame := r.frame
+		r.frame = nil
+		r.mu.Unlock()
+		return frame, nil
 	}
 }
 func (r *NativeRunner) Close() {

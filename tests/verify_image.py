@@ -64,7 +64,9 @@ def main():
     assert not (set(before) - set(after)), 'Deleted stock entries'
     for name in before.keys() - changed:
         assert before[name][:2] == after[name][:2], 'Unexpected data/metadata change: ' + name
-    assert after['/usr/bin/adbd'][1] == before['/usr/bin/adbd_backup'][1]
+    original_adbd = before.get('/usr/bin/adbd_backup', before.get('/usr/bin/adbd'))
+    assert original_adbd is not None, 'No original adbd in source image'
+    assert after['/usr/bin/adbd'][1] == original_adbd[1]
     assert after['/usr/bin/adbd'][0][0] & 0o777 == 0o755
     assert after['/adb_keys'][2].decode() == validate_public_key(key)
     assert b'if false; then' in after['/etc/init.d/S89usbgadget'][2]

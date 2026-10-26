@@ -242,6 +242,9 @@ func (s *Server) stationRequest(w http.ResponseWriter, r *http.Request) error {
 		return errors.New("station manager unavailable")
 	}
 	switch {
+	case r.URL.Path == "/api/audio" && r.Method == "GET":
+		jsonResponse(w, m.Audio.Snapshot())
+		return nil
 	case r.URL.Path == "/api/updates" && r.Method == "GET":
 		if m.Updater == nil {
 			return errors.New("updater unavailable")
@@ -440,6 +443,15 @@ func (s *Server) stationRequest(w http.ResponseWriter, r *http.Request) error {
 		}
 		id, action := parts[0], parts[1]
 		switch action {
+		case "update":
+			var q struct {
+				Ticket string `json:"ticket"`
+				ExpectedSHA string `json:"expected_sha256"`
+				Permissions []string `json:"permissions"`
+				Acknowledge bool `json:"acknowledge_permissions"`
+			}
+			if e := requestJSON(w, r, &q); e != nil { return e }
+			if e := m.InstallUpdate(q.Ticket, id, q.ExpectedSHA, q.Permissions, q.Acknowledge); e != nil { return e }
 		case "enable":
 			var q struct {
 				Enabled           bool `json:"enabled"`

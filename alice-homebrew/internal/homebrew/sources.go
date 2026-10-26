@@ -420,6 +420,7 @@ func (m *Manager) rebuildCatalogLocked() {
 			combined.Entries = append(combined.Entries, copy)
 		}
 	}
+	combined.Entries = latestCatalogEntries(combined.Entries)
 	sort.SliceStable(combined.Entries, func(i, j int) bool {
 		a, b := combined.Entries[i], combined.Entries[j]
 		if a.SourceOfficial != b.SourceOfficial {

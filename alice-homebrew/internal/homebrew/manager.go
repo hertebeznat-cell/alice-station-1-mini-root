@@ -30,6 +30,7 @@ type Installed struct {
 	StorageBytes    uint64   `json:"storage_bytes,omitempty"`
 	PreviousBytes   uint64   `json:"previous_bytes,omitempty"`
 	WASMMemoryBytes uint32   `json:"wasm_memory_bytes,omitempty"`
+	Update          *Entry   `json:"update,omitempty"`
 }
 type Settings struct {
 	CatalogURL string `json:"catalog_url"`
@@ -55,6 +56,7 @@ type Manager struct {
 	running         map[string]PluginRunner
 	tickets         map[string]ticket
 	Ring            *Ring
+	Audio           *AudioMeter
 	catalog         *Catalog
 	CatalogError    string
 	AllowLocalStore bool
@@ -73,6 +75,7 @@ func NewManager(dir string, hardware, allowLocal bool) (*Manager, error) {
 		return nil, e
 	}
 	m := &Manager{dir: dir, Ring: ring, running: map[string]PluginRunner{}, tickets: map[string]ticket{}, AllowLocalStore: allowLocal, catalogs: map[string]*Catalog{}, diskProbe: diskUsage}
+	m.Audio = &AudioMeter{}
 	m.state.Plugins = map[string]*Installed{}
 	b, e := os.ReadFile(filepath.Join(dir, "state.json"))
 	if e == nil {
@@ -141,6 +144,9 @@ func (m *Manager) Stage(raw []byte, reviewed bool) (map[string]any, error) {
 	return map[string]any{"ticket": id, "manifest": p.Manifest, "sha256": p.SHA256, "bytes": len(raw), "reviewed": reviewed, "storage": m.storagePlanLocked(p.RequiredStorage())}, nil
 }
 func (m *Manager) Install(id string, permissions []string, acknowledgeLocal bool) error {
+	return m.install(id, permissions, acknowledgeLocal, "", "", false)
+}
+func (m *Manager) install(id string, permissions []string, acknowledgeLocal bool, updateID, expectedSHA string, acknowledgeUpdate bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.tickets[id]
@@ -148,6 +154,24 @@ func (m *Manager) Install(id string, permissions []string, acknowledgeLocal bool
 		return errors.New("package confirmation expired")
 	}
 	p := t.Package
+	old := m.state.Plugins[p.Manifest.ID]
+	updating := updateID != ""
+	if updating {
+		if old == nil || p.Manifest.ID != updateID || old.SHA256 != expectedSHA {
+			return errors.New("plugin changed; refresh before updating")
+		}
+		if !old.Reviewed || !t.Reviewed || old.SourceID == "" || old.SourceID != t.SourceID {
+			return errors.New("plugin updates must come from the original trusted source")
+		}
+		if !newerPluginVersion(p.Manifest.Version, old.Manifest.Version) {
+			return errors.New("a newer plugin version is required")
+		}
+		if expandedPluginAccess(old, p.Manifest) {
+			if !acknowledgeUpdate { return errors.New("confirm newly requested plugin permissions") }
+		} else {
+			permissions = p.Manifest.Permissions
+		}
+	}
 	if !accepted(p.Manifest, permissions) {
 		return errors.New("confirm every requested permission")
 	}
@@ -175,7 +199,6 @@ func (m *Manager) Install(id string, permissions []string, acknowledgeLocal bool
 	if m.savedRevoked(Saved{SHA256: p.SHA256, SourceID: t.SourceID}) {
 		return errors.New("version revoked by the moderator")
 	}
-	old := m.state.Plugins[p.Manifest.ID]
 	if old == nil && len(m.state.Plugins) >= 8 {
 		return errors.New("maximum 8 installed plugins")
 	}
@@ -210,6 +233,7 @@ func (m *Manager) Install(id string, permissions []string, acknowledgeLocal bool
 		prior := clone(old.Saved)
 		current.Previous = &prior
 	}
+	if updating { current.Enabled = old.Enabled }
 	m.state.Plugins[p.Manifest.ID] = current
 	if e = m.save(); e != nil {
 		if old == nil {
@@ -220,6 +244,21 @@ func (m *Manager) Install(id string, permissions []string, acknowledgeLocal bool
 		return e
 	}
 	m.stop(p.Manifest.ID)
+	if old != nil && Has(old.Manifest, "led.ring") { m.Ring.Publish(make([]byte, 36)) }
+	if updating && current.Enabled {
+		if startErr := m.start(p.Manifest.ID); startErr != nil {
+			m.state.Plugins[p.Manifest.ID] = old
+			if restartErr := m.start(p.Manifest.ID); restartErr != nil {
+				old.Enabled = false
+				old.LastError = fmt.Sprintf("update failed: %v; previous version could not restart: %v", startErr, restartErr)
+			}
+			saveErr := m.save()
+			delete(m.tickets, id)
+			m.gc()
+			if saveErr != nil { return fmt.Errorf("plugin update failed: %v; saving rollback failed: %w", startErr, saveErr) }
+			return fmt.Errorf("plugin update failed; restored previous version: %w", startErr)
+		}
+	}
 	delete(m.tickets, id)
 	m.gc()
 	return nil
@@ -427,6 +466,7 @@ func (m *Manager) Snapshot() map[string]any {
 	plugins := []*Installed{}
 	for _, p := range m.state.Plugins {
 		copy := clone(p)
+		copy.Update = m.pluginUpdateLocked(p)
 		copy.StorageBytes, copy.PreviousBytes = m.pluginBytesLocked(p)
 		if r := m.running[p.Manifest.ID]; r != nil {
 			copy.Logs = r.LogLines()
@@ -448,6 +488,7 @@ func (m *Manager) Snapshot() map[string]any {
 	return map[string]any{"updates": m.updateStatus(), "plugins": plugins, "settings": m.state.Settings, "sources": sources, "catalog": catalog, "catalog_error": m.CatalogError, "ring": m.Ring.Snapshot(), "system": m.systemLocked(), "free_bytes": m.diskProbe(m.dir).AvailableBytes, "version": Version}
 }
 func (m *Manager) Run(ctx context.Context) {
+	go m.Audio.Serve(ctx)
 	m.mu.Lock()
 	for id, p := range m.state.Plugins {
 		if p.Enabled {
@@ -461,7 +502,7 @@ func (m *Manager) Run(ctx context.Context) {
 	m.ready = true
 	m.mu.Unlock()
 	go func() { _ = m.RefreshAll(ctx) }()
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	boot := time.Now()
 	for {

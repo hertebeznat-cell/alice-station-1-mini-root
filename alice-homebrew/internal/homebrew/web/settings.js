@@ -103,7 +103,7 @@ function storageDialog(plan,staged){
  if(!choices.length)d.append(el('div','info warn',t('Установленных плагинов нет. Освободите место на колонке вручную и повторите проверку.')));
  const selectedBytes=el('p','caption'),remove=button('Удалить выбранные и продолжить',async()=>{const selected=choices.filter(v=>v.check.checked);if(!selected.length)throw Error(t('Плагины не выбраны'));for(const item of selected)await api(`/api/plugins/${item.plugin.id}/remove`,{});await load();await retry()},'primary');
  const sync=()=>{const selected=choices.filter(v=>v.check.checked),bytes=selected.reduce((n,v)=>n+v.plugin.bytes,0);remove.disabled=!selected.length;selectedBytes.textContent=`${t('Выбрано для удаления')}: ${formatBytes(bytes)}${bytes<plan.missing_bytes?' · '+t('Места от удаления этих плагинов может не хватить.'):''}`};choices.forEach(v=>v.check.onchange=sync);sync();
- const retry=async()=>{const fresh=await api('/api/storage/plan',{ticket:staged.ticket});if(fresh.fits)showConfirmation({...staged,storage:fresh});else storageDialog(fresh,staged)};
+ const retry=async()=>{const fresh=await api('/api/storage/plan',{ticket:staged.ticket});if(fresh.fits){const next={...staged,storage:fresh};if(next.update&&next.fast_update)await finishPluginUpdate(next);else showConfirmation(next)}else storageDialog(fresh,staged)};
  d.append(selectedBytes,remove,button('Проверить место снова',retry,'secondary'),button('Отмена',()=>$('confirm').close(),'quiet'));openConfirm();
 }
 function catalogPage(c){
@@ -118,7 +118,7 @@ function catalogPage(c){
 }
 function detailPage(c){
  const p=state.plugins?.find(p=>p.manifest.id===selected);if(!p){selected='';pluginsPage(c);return}
- c.append(button('Назад к плагинам',()=>{selected='';render()},'quiet back'),head(text(p.manifest.title),`${p.manifest.author} · v${p.manifest.version}`,button(p.enabled?'Выключить':'Включить',async()=>{await togglePlugin(p)},p.enabled?'secondary':'primary')));
+ const headerActions=el('div','button-row');if(p.update)headerActions.append(pluginUpdateButton(p));headerActions.append(button(p.enabled?'Выключить':'Включить',async()=>{await togglePlugin(p)},p.enabled?'secondary':'primary'));c.append(button('Назад к плагинам',()=>{selected='';render()},'quiet back'),head(text(p.manifest.title),`${p.manifest.author} · v${p.manifest.version}`,headerActions));if(p.update)c.append(el('div','info',t('Доступна версия')+' '+p.update.manifest.version));
  if(p.last_error)c.append(el('div','info warn',p.last_error));
  const grid=el('div','detail-grid'),form=el('form','settings-box'),values={...p.config};
  form.append(el('p','caption',t('Настройки сохраняются на колонке и остаются после перезагрузки.')));
@@ -145,7 +145,7 @@ function detailPage(c){
  controls.append(button('Удалить',async()=>{if(confirm(t('Удалить плагин и его настройки?'))){await api(`/api/plugins/${p.manifest.id}/remove`,{});selected='';await load()}},'quiet danger'));form.append(controls);
  form.append(el('div','metadata',`${t('Место на диске')}: ${formatBytes(p.storage_bytes||0)} · ${t('Память WASM')}: ${formatBytes(p.wasm_memory_bytes||0)}`));
  if(p.logs?.length)form.append(el('h3','',t('Журнал')),el('pre','',p.logs.join('\n')));
- const preview=el('aside','preview-panel');preview.append(makeSpeaker(),el('h3','',t(state.ring?.hardware?'Подсветка колонки':'Предпросмотр на ПК')),el('p','',t('Цвета показывают кадр, который создал запущенный плагин.')));grid.append(form,preview);c.append(grid);updateRings();
+ grid.append(form,pluginPanel(p));c.append(grid);updateRings();updatePluginPanel();
 }
 
 function updateWords(ru,en){return lang==='ru'?ru:en}
@@ -174,3 +174,21 @@ function updateManagerUpdates(){
 }
 
 function isNewerManagerVersion(candidate,current){if(!candidate)return false;const a=candidate.split('.').map(Number),b=current.split('.').map(Number);for(let i=0;i<3;i++){if(a[i]!==b[i])return a[i]>b[i]}return false}
+
+function pluginPanel(p){
+ const m=p.manifest,ring=m.permissions.includes('led.ring'),audio=m.capabilities?.includes('audio.playback'),panel=el('aside','preview-panel plugin-panel');panel.dataset.pluginPanel=m.id;
+ const words=(ru,en)=>lang==='ru'?ru:en;
+ if(ring){const speaker=makeSpeaker();speaker.querySelector('.ring').dataset.plugin=m.id;panel.append(speaker,el('h3','',words('Кольцо подсветки','LED ring')),el('p','caption',words('Живой кадр выбранного плагина. Выключенный плагин не показывает чужую подсветку.','Live frame for this plugin. Disabled plugins do not display another plugin’s LEDs.')))}
+ else if(audio){panel.append(el('div','audio-glyph','♫'),el('h3','',m.id==='airplay'?words('Приёмник AirPlay','AirPlay receiver'):words('Воспроизведение звука','Audio playback')),el('strong','receiver-name',String(p.config.name||text(m.title))));if(m.id==='airplay'){panel.append(el('p','caption',words('На iPhone: Пункт управления → музыка → AirPlay.','On iPhone: Control Center → music → AirPlay.')));for(const [label,value]of [[words('Выход','Output'),p.config.device],[words('Порт','Port'),p.config.port],[words('Защита','Protection'),p.config.password?words('Пароль включён','Password enabled'):words('Без пароля','No password')]]){const row=el('div','panel-value');row.append(el('span','',label),el('strong','',String(value??'—')));panel.append(row)}}}
+ else{panel.append(el('div','audio-glyph',m.capabilities?.includes('audio.capture')?'◉':'⌘'),el('h3','',text(m.title)),el('p','caption',text(m.description)));for(const cap of m.capabilities||[])panel.append(el('span','badge capability',cap))}
+ const status=el('div','badge panel-status');status.dataset.panelStatus=m.id;panel.append(status);
+ if(m.id==='music-ring'||m.id==='airplay'){panel.dataset.audioPanel=m.id;const bars=el('div','audio-spectrum');bars.setAttribute('aria-label',words('Уровни музыки','Music levels'));for(let i=0;i<12;i++)bars.append(el('i'));panel.append(bars);const note=el('p','caption');note.dataset.audioNote=m.id;panel.append(note)}
+ return panel;
+}
+function updatePluginPanel(){
+ const panel=document.querySelector('[data-plugin-panel]');if(!panel)return;const id=panel.dataset.pluginPanel,p=state.plugins?.find(p=>p.manifest.id===id);if(!p)return;const words=(ru,en)=>lang==='ru'?ru:en;
+ const status=panel.querySelector('[data-panel-status]');status.textContent=p.last_error||words(p.enabled?'Плагин запущен':'Плагин выключен',p.enabled?'Plugin running':'Plugin disabled');status.className='badge panel-status'+(p.last_error?' error':'');
+ const data=state.audio,audio=!!p.enabled&&data?.available&&data.source==='airplay';const bands=panel.querySelectorAll('.audio-spectrum i');bands.forEach((bar,i)=>{const level=audio?Math.min(1,Math.sqrt((data.bands?.[i]||0)*12)):0;bar.style.height=`${5+level*95}%`;bar.classList.toggle('active',audio&&data.active)});
+ const note=panel.querySelector('[data-audio-note]');if(!note)return;
+ note.textContent=!p.enabled?words('Включите плагин, чтобы начать.','Enable this plugin to begin.'):data?.error?data.error:audio?words(data.active?'Музыка поступает из AirPlay':'Поток AirPlay: тишина',data.active?'Receiving AirPlay audio':'AirPlay stream: silence'):id==='music-ring'?words('Ожидаем музыку. Включите AirPlay версии beta.2 или новее и запустите воспроизведение с iPhone.','Waiting for music. Enable AirPlay beta.2 or newer and start playback on your iPhone.'):words('Выберите колонку на iPhone. Живой спектр доступен с AirPlay beta.2.','Select the speaker on your iPhone. Live spectrum requires AirPlay beta.2.');
+}

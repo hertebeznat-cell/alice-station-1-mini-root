@@ -2,6 +2,7 @@
 import re
 
 PAIRS = [
+    ("Recognized the existing noupdate patch; preserving and completing the OTA block.", "Распознан прежний патч noupdate; сохраняю и дополняю блокировку OTA."),
     ("Cannot load libusb. Download and extract the latest official application release; the USB library is bundled and does not require compiling a driver helper.", "Не удалось загрузить libusb. Скачайте и распакуйте последнюю официальную сборку приложения: USB-библиотека входит в неё, собирать помощник драйвера не нужно."),
     ("Homebrew is installed automatically. The stock Alice service stays enabled.", "Homebrew устанавливается автоматически. Штатная Алиса остаётся включённой."),
     ("Installing Homebrew on the speaker...", "Установка Homebrew на колонку..."),

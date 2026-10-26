@@ -109,3 +109,11 @@ alice-pcm playback plughw:0,0 48000 2 S32_LE 1024 < stereo.pcm
 ## Каталоги
 
 `catalog/v1.json` содержит только API 1 для старых менеджеров; `catalog/v2.json` содержит API 1 и API 2. Оба подписываются тем же ключом. Homebrew 0.3 переводит встроенный официальный источник на v2, сохраняя настройки и историю отзыва. Собственный источник экспортирует обе версии. Формат конверта подписи остаётся 1.
+
+## Native LED frames and audio levels (Homebrew 0.5.0)
+
+A native plugin declaring `led.ring` may write one newline-terminated stdout record `@alice-ring BASE64`, containing exactly 36 bytes of BGR LED data. The native runner keeps only the latest frame; the manager owns I²C, applies it at up to 20 Hz and exposes the live preview. LED ownership conflicts and shutdown clearing use the same rules as WASM plugins. Regular stdout/stderr still goes to bounded logs.
+
+Homebrew listens only on `127.0.0.1:18789/udp`. A playback source may send 64 bytes: ASCII `ALICEAU1`, then 14 LE float32 values in [0,1]: RMS, peak and 12 frequency bands. Only summaries are accepted, no raw audio. A local plugin sends ASCII `ALICE_LEVELS1` to receive a JSON snapshot; web UI can use `GET /api/audio`. Data expires after 400 ms. This is intended for one speaker manager instance. Root plugins are trusted; this local protocol is not an isolation boundary.
+
+AirPlay beta.2 emits these summaries from its S32_LE ALSA output. Music Ring beta.1 consumes them without opening the microphone. Other players need their own meter integration. The new implementation was released without tests at the owner’s request; no measured synchronization accuracy or universal player compatibility is claimed.

@@ -33,7 +33,7 @@ class App:
         self.values = {key: tk.StringVar(value=settings.get(key, default)) for key, default in {
             "work": str(default_workspace()), "adb": "", "distro": "", "builder_python": ""}.items()}
         self.frame = None
-        root.title("Station Mini Root 0.3.9 · YNDX-0004")
+        root.title("Station Mini Root 0.3.10 · YNDX-0004")
         root.geometry("840x640")
         root.minsize(760, 580)
         style = ttk.Style()

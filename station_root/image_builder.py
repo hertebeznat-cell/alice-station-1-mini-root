@@ -60,10 +60,48 @@ def inspect_layout(source):
         handle.close()
 
 
+KNOWN_NOUPDATE_SCRIPT = (b'#!/bin/sh\n# disabled by noupdate\n'
+                        b'logger -t noupdate "OTA apply blocked" 2>/dev/null\nexit 0\n')
+
+
+def known_noupdate_policy(root, tasks):
+    """Recognize the previously installed noupdate patch, not arbitrary absence.
+
+    Its exact inert apply script and the normal Mini 1 main task must both be
+    present. Unknown updater launch paths are not silently accepted.
+    """
+    script = root / "system/vendor/quasar/device_ota_update.sh"
+    if script.is_symlink() or not script.is_file():
+        return False
+    if script.read_bytes().replace(b"\r\n", b"\n") != KNOWN_NOUPDATE_SCRIPT:
+        return False
+    if not tasks or not all(isinstance(task, dict) for task in tasks):
+        return False
+    main_found = False
+    updater_names = {"updatesd", "updater", "updater_switcher", "a01localupdate", "device_ota_update.sh"}
+    for task in tasks:
+        arguments = task.get("arg", [])
+        if not isinstance(arguments, list) or not all(isinstance(arg, str) for arg in arguments):
+            return False
+        path = task.get("path", "")
+        if not isinstance(path, str):
+            return False
+        if task.get("name") in updater_names or Path(path).name in updater_names:
+            return False
+        if any(arg == "--updatesd" or arg.startswith("--updatesd=") or
+               Path(arg).name in updater_names for arg in arguments):
+            return False
+        if (task.get("name") == "maind" and path == "/system/vendor/quasar/maind"
+                and arguments == ["--yandexmini"]):
+            main_found = True
+    return main_found
+
+
 def disable_ota(root):
+    root = Path(root)
     launch = root / "system/vendor/quasar/launch.json"
     data = json.loads(launch.read_text(encoding="utf-8"))
-    removed = []
+    removed, retained = [], []
     def visit(value):
         if isinstance(value, dict):
             for key, child in list(value.items()):
@@ -75,28 +113,32 @@ def disable_ota(root):
                             removed.append(task.get("name", "updatesd"))
                         else:
                             kept.append(task)
+                            retained.append(task)
                     value[key] = kept
                 visit(value[key])
         elif isinstance(value, list):
             for child in value:
                 visit(child)
     visit(data)
-    if not removed:
+    previous_policy = not removed and known_noupdate_policy(root, retained)
+    if not removed and not previous_policy:
         raise RuntimeError("Cannot identify updatesd in launch.json; refusing to claim OTA is blocked")
+    entrypoints = [root / rel for rel in ("system/vendor/quasar/device_ota_update.sh",
+                                         "system/vendor/quasar/a01localupdate")]
+    if not any(path.is_file() or path.is_symlink() for path in entrypoints):
+        raise RuntimeError("No known OTA entry point was found")
     launch.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
     blocked = []
-    for rel in ("system/vendor/quasar/device_ota_update.sh", "system/vendor/quasar/a01localupdate"):
-        path = root / rel
+    for path in entrypoints:
         if path.is_file() or path.is_symlink():
             # Replace the entry, never follow a symlink into a shared multicall binary.
             if path.is_symlink():
                 path.unlink()
             path.write_text('#!/bin/sh\necho "OTA disabled by Station Mini Root" >&2\nexit 78\n', encoding="utf-8")
             path.chmod(0o755)
-            blocked.append("/" + rel)
-    if not blocked:
-        raise RuntimeError("No known OTA entry point was found")
-    return {"removed_tasks": removed, "blocked_entrypoints": blocked}
+            blocked.append("/" + path.relative_to(root).as_posix())
+    return {"removed_tasks": removed, "blocked_entrypoints": blocked,
+            "source_policy": "noupdate-v1" if previous_policy else "stock-updatesd"}
 
 
 def patch_adb_activation(content):
@@ -194,6 +236,8 @@ def build(source, public_key, destination, block_updates=True):
             raise RuntimeError("Ожидался один UBI-том rootfs")
         root = roots[0]
         marker = patch_rootfs(root, key_text, block_updates)
+        if marker.get("ota_policy", {}).get("source_policy") == "noupdate-v1":
+            print("Recognized the existing noupdate patch; preserving and completing the OTA block.", flush=True)
         if marker["source_adb_activation"] == "legacy-persistent":
             print("Распознан прежний патч persistent USB ADB; обновляю ключ и настройки USB/OTA.", flush=True)
         ubifs_path = work / "rootfs.ubifs"

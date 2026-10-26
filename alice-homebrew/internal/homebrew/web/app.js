@@ -6,7 +6,8 @@ Object.assign(phrases.en,settingsWords,{
  'Полный доступ к системе, микрофону, звуку, датчикам, файлам и сети':'Full system access: microphone, audio, sensors, files and network',
  'Нативный плагин работает с правами root без песочницы. Включить его?':'This native plugin runs as root without a sandbox. Enable it?',
  'Нативный плагин получает полный доступ к колонке. Устанавливайте только код, которому доверяете.':'Native plugins have full access to the speaker. Install only code you trust.',
- 'Заявленные возможности':'Declared capabilities'
+ 'Заявленные возможности':'Declared capabilities',
+ 'Обновить':'Update','Плагин обновлён. Настройки сохранены.':'Plugin updated. Settings preserved.','Доступна версия':'Available version','Обновление плагина':'Plugin update'
 });
 const t=s=>lang==='en'?(phrases.en[s]||s):s;
 const text=x=>typeof x==='string'?x:(x?.[lang]||x?.ru||x?.en||'');
@@ -25,7 +26,7 @@ function head(title,description,actionButton){const d=el('div','page-head'),left
 function setRoute(next){route=next;selected='';action(load)}
 function navigation(){if($('manager-version'))$('manager-version').textContent='ALICE HOMEBREW · '+(about.version||'');const n=$('navigation');n.replaceChildren();const list=about.mode==='store'?[['review','◫','Модерация'],['publish','↗','Публикация']]:[['plugins','◫','Мои плагины'],['catalog','⌘','Магазин'],['settings','⚙','Настройки']];for(const [id,icon,label]of list){const b=button('',()=>setRoute(id),route===id?'active':'');b.append(el('span','nav-icon',icon),document.createTextNode(t(label)));n.append(b)}$('nav-label').textContent=about.mode==='store'?'CATALOG STUDIO':t('ВАША КОЛОНКА');$('eyebrow').textContent=t('СОЗДАЙ СВОЮ АЛИСУ');$('logout').classList.toggle('hidden',!about.access_code_required);$('logout').textContent=t('Выйти');$('connection').textContent=t('Локальное управление')}
 function makeSpeaker(){const v=el('div','hero-visual'),speaker=el('div','speaker'),ring=el('div','ring');for(let i=0;i<12;i++){const dot=el('i','led');const a=(i/12)*Math.PI*2;dot.style.left=`${53+Math.cos(a)*49}px`;dot.style.top=`${29+Math.sin(a)*27}px`;ring.append(dot)}speaker.append(ring);v.append(speaker);return v}
-function updateRings(){const colors=state.ring?.colors||[];for(const ring of document.querySelectorAll('.ring'))[...ring.children].forEach((d,i)=>{if(colors[i]){d.style.background=colors[i];d.style.color=colors[i]}})}
+function updateRings(){const colors=state.ring?.colors||[];for(const ring of document.querySelectorAll('.ring')){const id=ring.dataset.plugin,p=id&&state.plugins?.find(p=>p.manifest.id===id),active=!id||p?.enabled;[...ring.children].forEach((d,i)=>{const color=active?(colors[i]||'#000000'):'#000000';d.style.background=color;d.style.color=color})}}
 function upload(label){return button(label,()=>{const input=el('input','hidden');input.type='file';input.accept='.aliceplugin';input.onchange=()=>{const file=input.files[0];if(!file)return;action(async()=>{if(file.size>16*1024*1024)throw Error('Maximum package size: 16 MiB');if(about.mode==='store'){const v=await api('/api/submit',file,true);toast(t('Заявка отправлена на проверку')+' · '+v.sha256.slice(0,12));if(about.authenticated)await load()}else{showConfirmation(await api('/api/inspect',file,true))}})};input.click()},'primary')}
 function permissionsLabel(p){return t(p==='led.ring'?'Управление кольцом подсветки':p==='log.write'?'Журнал плагина':p==='system.full-access'?'Полный доступ к системе, микрофону, звуку, датчикам, файлам и сети':p)}
 function showConfirmation(staged){
@@ -39,14 +40,14 @@ function showConfirmation(staged){
  if(!staged.reviewed){d.append(el('div','info warn',t('Этот локальный пакет не проходил модерацию магазина.')));const label=el('label','permission');local=el('input');local.type='checkbox';label.append(local,document.createTextNode(t('Понимаю и доверяю автору этого локального пакета')));d.append(label);checks.push(local)}
  if(plan){d.append(el('div','info'+(!plan.fits?' warn':''),`${t(plan.fits?'Места достаточно':'Недостаточно места')}. ${t('Размер пакета')}: ${formatBytes(staged.bytes||plan.package_bytes)}${staged.manifest.engine==='native'?' · '+(lang==='ru'?'Для установки':'Installation storage')+': '+formatBytes(plan.package_bytes):''} · ${t('Доступно')}: ${formatBytes(plan.available_bytes)}`));if(!plan.fits)d.append(button('Освободить место',()=>storageDialog(plan,staged),'secondary'))}
  d.append(el('div','hash',`SHA-256 ${staged.sha256}`));
- const install=button('Установить',async()=>{try{await api('/api/install',{ticket:staged.ticket,permissions:staged.manifest.permissions,acknowledge_local:!!local?.checked});$('confirm').close();route='plugins';selected='';await load();toast(t('Плагин установлен. Теперь его можно включить.'))}catch(error){if(error.code==='insufficient_storage'){storageDialog(error.details,staged);return}throw error}},'primary');
+ const install=button(staged.update?'Обновить':'Установить',async()=>{try{if(staged.update){await finishPluginUpdate(staged,true);return}await api('/api/install',{ticket:staged.ticket,permissions:staged.manifest.permissions,acknowledge_local:!!local?.checked});$('confirm').close();route='plugins';selected='';await load();toast(t('Плагин установлен. Теперь его можно включить.'))}catch(error){if(error.code==='insufficient_storage'){storageDialog(error.details,staged);return}throw error}},'primary');
  const sync=()=>install.disabled=checks.some(c=>!c.checked)||plan?.fits===false;checks.forEach(c=>c.onchange=sync);sync();d.append(install,button('Отмена',()=>$('confirm').close(),'quiet'));openConfirm();
 }
 function pluginCard(p,catalog=false){
  const m=p.manifest,c=el('article','card'),top=el('div','card-top');top.append(el('span','plugin-icon',m.permissions.includes('led.ring')?'◉':'⌘'),sourceBadge(!!p.source_official,catalog||p.reviewed));c.append(top,el('h3','',text(m.title)),el('p','',text(m.description)));
  const footer=el('div','card-footer'),meta=el('div','metadata',`${m.author} · v${m.version}`);if(p.source_name)meta.append(el('div','',p.source_name));
- if(!catalog){const status=el('div',p.last_error?'error':'',t(p.last_error?'Ошибка':p.enabled?'Включён':'Выключен'));status.dataset.status=m.id;meta.append(status,el('div','',formatBytes(p.storage_bytes||0)));footer.append(meta,button('Настроить',()=>{selected=m.id;render()}))}
- else{const installed=state.plugins?.some(v=>v.sha256===p.sha256),b=button(installed?'Эта версия установлена':'Установить',async()=>{toast(t('Проверка подписи и скачивание…'));showConfirmation(await api('/api/catalog/inspect',{sha256:p.sha256,source_id:p.source_id}))},'secondary');b.disabled=installed;footer.append(meta,b)}
+ if(!catalog){const status=el('div',p.last_error?'error':'',t(p.last_error?'Ошибка':p.enabled?'Включён':'Выключен'));status.dataset.status=m.id;meta.append(status,el('div','',formatBytes(p.storage_bytes||0)));const actions=el('div','button-row plugin-actions');if(p.update){meta.append(el('div','update-notice',t('Доступна версия')+' '+p.update.manifest.version));actions.append(pluginUpdateButton(p))}actions.append(button('Настроить',()=>{selected=m.id;render()}));footer.classList.add('plugin-footer');footer.append(meta,actions)}
+ else{const installed=state.plugins?.some(v=>v.sha256===p.sha256),current=state.plugins?.find(v=>v.manifest.id===m.id&&v.source_id===p.source_id),canUpdate=!!current?.update&&current.update.sha256===p.sha256,b=button(installed?'Эта версия установлена':canUpdate?'Обновить':'Установить',async()=>{if(canUpdate){await updatePlugin(current,p);return}toast(t('Проверка подписи и скачивание…'));showConfirmation(await api('/api/catalog/inspect',{sha256:p.sha256,source_id:p.source_id}))},'secondary');b.disabled=installed;footer.append(meta,b)}
  c.append(footer);return c;
 }
 function pluginsPage(c){if(selected){detailPage(c);return}c.append(head('Мои плагины','Расширения, которые делают колонку вашей.',packageActions()));const hero=el('section','hero'),copy=el('div');copy.append(el('span','eyebrow','ALICE × YOU'),el('h2','',t('Немного больше возможностей.')),el('p','',t('Установите плагин, настройте его под себя и включите одним нажатием.')),button('Открыть магазин',()=>setRoute('catalog'),'secondary'));hero.append(copy,makeSpeaker());c.append(hero);const section=el('div','section-head'),h=el('h2','',t('Установлено'));h.append(el('span','count',String(state.plugins?.length||0)));section.append(h);c.append(section);if(!state.plugins?.length){const empty=el('div','empty');empty.append(el('h3','',t('Пока без плагинов')),el('p','',t('Добавьте .aliceplugin с компьютера или выберите расширение в магазине.')),upload('Добавить пакет'));c.append(empty)}else{const cards=el('div','cards');state.plugins.forEach(p=>cards.append(pluginCard(p)));c.append(cards)}updateRings()}
@@ -65,9 +66,10 @@ async function start(){
  setInterval(async()=>{if(document.hidden||about.mode!=='station'||!about.authenticated)return;try{const update=await api('/api/status');state.system=update.system;state.updates=update.updates;updateManagerUpdates();for(const status of update.plugins){const p=state.plugins?.find(p=>p.manifest.id===status.id);if(p)Object.assign(p,status)}updateSystemMetrics();for(const label of document.querySelectorAll('[data-status]')){const p=state.plugins?.find(p=>p.manifest.id===label.dataset.status);if(p)label.textContent=p.last_error||t(p.enabled?'Включён':'Выключен')}}catch{}},3000);
 }
 start().catch(e=>toast(e.message,true));
-setInterval(async()=>{if(document.hidden||about.mode!=='station'||!about.authenticated)return;try{state.ring=await api('/api/ring');updateRings()}catch{}},150);
+let livePanelBusy=false;
+setInterval(async()=>{if(livePanelBusy||document.hidden||about.mode!=='station'||!about.authenticated)return;livePanelBusy=true;try{state.ring=await api('/api/ring');if(selected&&document.querySelector('[data-audio-panel]')){try{state.audio=await api('/api/audio')}catch{state.audio=null}}updateRings();updatePluginPanel()}catch{}finally{livePanelBusy=false}},150);
 
-function packageActions(){const row=el('div','field-row');row.append(button('По ссылке',fetchDialog,'secondary'),upload('Добавить пакет'));return row}
+function packageActions(){const row=el('div','field-row');row.append(button('Обновить каталог',async()=>{await api('/api/catalog/refresh',{});await load()},'secondary'),button('По ссылке',fetchDialog,'secondary'),upload('Добавить пакет'));return row}
 function fetchDialog(){
  const d=$('confirm-content');d.replaceChildren(el('h2','',t('Скачать на колонку')),el('p','',t('Файл скачивает сама колонка. Для локальной сети укажите IP компьютера, на котором лежит пакет.')));
  const form=el('form'),url=el('input'),hash=el('input');url.type='url';url.required=true;url.placeholder='http://192.168.1.20:8000/MyPlugin.aliceplugin';hash.placeholder='SHA-256';hash.pattern='[0-9a-f]{64}';
@@ -80,4 +82,23 @@ async function togglePlugin(p){
  const native=p.manifest.engine==='native';
  if(!p.enabled&&native&&!confirm(t('Нативный плагин работает с правами root без песочницы. Включить его?')))return;
  await api(`/api/plugins/${p.manifest.id}/enable`,{enabled:!p.enabled,acknowledge_native:!p.enabled&&native});await load();
+}
+
+function pluginUpdateButton(p){return button('Обновить',()=>updatePlugin(p),'primary')}
+async function updatePlugin(p,entry=p.update){
+ if(!entry)return;
+ toast(t('Обновление плагина')+' · '+entry.manifest.version);
+ const staged=await api('/api/catalog/inspect',{sha256:entry.sha256,source_id:entry.source_id});
+ staged.update={id:p.manifest.id,expected_sha256:p.sha256};
+ const expanded=staged.manifest.permissions.some(permission=>!p.manifest.permissions.includes(permission))||(staged.manifest.engine==='native'&&(p.manifest.engine!=='native'||!p.native_consent));
+ staged.fast_update=!expanded;
+ if(staged.storage?.fits===false){storageDialog(staged.storage,staged);return}
+ if(expanded){showConfirmation(staged);return}
+ await finishPluginUpdate(staged);
+}
+async function finishPluginUpdate(staged,acknowledge=false){
+ try{
+  await api(`/api/plugins/${staged.update.id}/update`,{ticket:staged.ticket,expected_sha256:staged.update.expected_sha256,permissions:acknowledge?staged.manifest.permissions:[],acknowledge_permissions:acknowledge});
+ }catch(error){if(error.code==='insufficient_storage'){storageDialog(error.details,staged);return}throw error}
+ if($('confirm').open)$('confirm').close();route='plugins';selected=staged.update.id;await load();toast(t('Плагин обновлён. Настройки сохранены.'));
 }

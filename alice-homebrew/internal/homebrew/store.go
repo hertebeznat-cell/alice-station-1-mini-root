@@ -216,6 +216,7 @@ func (s *Store) CatalogFor(maxAPI int) (Envelope, error) {
 			c.Revoked = append(c.Revoked, v.SHA256)
 		}
 	}
+	c.Entries = latestCatalogEntries(c.Entries)
 	sort.Slice(c.Entries, func(i, j int) bool {
 		a, b := c.Entries[i], c.Entries[j]
 		return a.Manifest.ID+"@"+a.Manifest.Version < b.Manifest.ID+"@"+b.Manifest.Version
