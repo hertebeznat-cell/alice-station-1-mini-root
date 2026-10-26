@@ -90,7 +90,7 @@ func NewUpdater(dir, listen string, managed bool) (*Updater, error) {
 	u.status.Supported = runtime.GOOS == "linux" && managed
 	u.status.Current = Version
 	u.status.IntervalHours = 5
-	u.client = &http.Client{Timeout: 90 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	u.client = &http.Client{Transport: trustedHTTPTransport(), Timeout: 90 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) > 4 || !trustedUpdateURL(req.URL) {
 			return errors.New("update redirect left GitHub HTTPS")
 		}

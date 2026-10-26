@@ -3,9 +3,9 @@ from pathlib import Path
 import hashlib
 import urllib.request
 root=Path(__file__).resolve().parents[1]
-url="https://github.com/hertebeznat-cell/alice-homebrew/releases/download/v0.5.1/alice-homebrew-linux-arm64"
-expected="1caa977b8fe77166f0172754d1bf0b0022c14800f6d59ee580a792ea80645d97"
-size=9633954
+url="https://github.com/hertebeznat-cell/alice-homebrew/releases/download/v0.5.2/alice-homebrew-linux-arm64"
+expected="f5f103085375eb749ab22edf9e768d8751bfa5c5e5111755275c6e7f41886214"
+size=9830562
 target=root/'alice-homebrew/dist/alice-homebrew-linux-arm64'
 if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest()==expected:
     print('Pinned Homebrew payload already present')

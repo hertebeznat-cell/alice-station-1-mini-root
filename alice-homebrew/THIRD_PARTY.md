@@ -8,3 +8,7 @@ The package module is pinned in go.mod and go.sum. No Yandex firmware, keys, acc
 
 
 Native AirPlay dependencies, exact versions, notices and source/relinking materials are documented in `plugins/airplay/README.md` and `plugins/airplay/licenses/`. HashiCorp mDNS 1.0.7 is MIT licensed. Its pinned Go dependencies retain their upstream licenses in `licenses/`.
+
+## Mozilla CA certificate store
+
+The unmodified PEM bundle from https://curl.se/ca/cacert.pem is MPL-2.0. Source, SHA-256 and retrieval metadata: internal/homebrew/certs/. License and notice: licenses/mozilla-ca/. The surrounding Homebrew Go code remains MIT.

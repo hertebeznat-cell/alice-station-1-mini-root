@@ -39,7 +39,7 @@ func (m *Manager) FetchURL(ctx context.Context, raw, expected string) (map[strin
 	if e != nil {
 		return nil, e
 	}
-	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	client := &http.Client{Transport: trustedHTTPTransport(), Timeout: 30 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) > 5 {
 			return errors.New("too many download redirects")
 		}

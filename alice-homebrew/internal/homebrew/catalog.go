@@ -104,7 +104,7 @@ func (m *Manager) download(ctx context.Context, raw string, origin *url.URL, lim
 	if u.Scheme != origin.Scheme || u.Host != origin.Host {
 		return nil, errors.New("downloads must stay on the catalog origin")
 	}
-	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	client := &http.Client{Transport: trustedHTTPTransport(), Timeout: 30 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) > 3 || req.URL.Scheme != origin.Scheme || req.URL.Host != origin.Host {
 			return errors.New("catalog redirect left the trusted origin")
 		}

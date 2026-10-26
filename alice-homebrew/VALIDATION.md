@@ -1,3 +1,9 @@
+# Release 0.5.2
+
+See [VALIDATION-0.5.2.md](VALIDATION-0.5.2.md) for targeted TLS checks. No device installation or full Homebrew regression suite was run. The sections below refer to historical releases.
+
+---
+
 # Release 0.5.1
 
 Compiled and packaged without tests or manual speaker installation, at the owner’s request. See [VALIDATION-0.5.1.md](VALIDATION-0.5.1.md). Prior sections describe historical releases only.

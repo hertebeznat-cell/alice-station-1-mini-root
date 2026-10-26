@@ -33,7 +33,7 @@ class App:
         self.values = {key: tk.StringVar(value=settings.get(key, default)) for key, default in {
             "work": str(default_workspace()), "adb": "", "distro": "", "builder_python": ""}.items()}
         self.frame = None
-        root.title("Station Mini Root 0.3.10 · YNDX-0004")
+        root.title("Station Mini Root 0.3.11 · YNDX-0004")
         root.geometry("840x640")
         root.minsize(760, 580)
         style = ttk.Style()
@@ -85,6 +85,9 @@ class App:
             self.buttons.append(button)
         ttk.Label(frame, text=self.text("Root installation includes a backup and disables automatic Yandex updates."), wraplength=780).pack(anchor="w")
         ttk.Label(frame, text=self.text("Homebrew is installed automatically. The stock Alice service stays enabled."), wraplength=780).pack(anchor="w", pady=(4, 0))
+        self.homebrew_button = ttk.Button(frame, text=self.text("Update Homebrew only (ADB root)"),
+                                         command=lambda: self.start("homebrew"))
+        self.homebrew_button.pack(anchor="w", pady=(5, 0))
         ttk.Label(frame, text=self.text("Do not disconnect power during writing or read-back verification."), wraplength=780,
                   foreground="#945400").pack(anchor="w", pady=(5, 12))
         self.status = tk.StringVar(value=self.text("Looking for installed tools and WSL...") if self.inspect_pending else self.text("Ready"))
@@ -111,6 +114,7 @@ class App:
         self.buttons[0]["state"] = "disabled" if busy or self.inspect_pending else "normal"
         for button in self.buttons[1:]:
             button["state"] = "normal" if self.dependencies_ready and not busy and not self.inspect_pending else "disabled"
+        self.homebrew_button["state"] = "disabled" if busy or self.inspect_pending else "normal"
         self.language_choice["state"] = "disabled" if busy else "readonly"
 
     def show_inspection(self, result):
@@ -143,10 +147,14 @@ class App:
 
     def start(self, command):
         if self.busy or self.inspect_pending: return
-        if command != "dependencies" and not self.dependencies_ready:
+        if command not in ("dependencies", "homebrew") and not self.dependencies_ready:
             messagebox.showinfo(self.text("Dependencies"), self.text("Install dependencies to unlock root and restore"))
             return
         config = self.config()
+        if command == "homebrew":
+            if not messagebox.askyesno(self.text("Update Homebrew only (ADB root)"),
+                    self.text("Connect the rooted speaker in normal ADB mode. Only Homebrew will be updated; system firmware and plugin settings are preserved.")):
+                return
         if command == "install":
             if not messagebox.askyesno(self.text("Install root"), self.text("Connected device is Mini 1 (YNDX-0004). Continue?") + "\n\n" +
                     self.text("The app will save a backup, build and write the image, verify it, reboot and check root.")): return
@@ -186,6 +194,7 @@ class App:
                 if command == "dependencies":
                     self.events.put(("dependency_complete", self.dependencies.install(config)))
                 elif command == "install": self.workflow.install(config)
+                elif command == "homebrew": self.workflow.update_homebrew(config)
                 elif command == "restore":
                     if config.get("use_session"): self.workflow.unroot(config)
                     else:

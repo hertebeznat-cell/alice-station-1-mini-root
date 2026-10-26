@@ -2,6 +2,10 @@
 import re
 
 PAIRS = [
+    ("Update Homebrew only (ADB root)", "Обновить только Homebrew (ADB root)"),
+    ("Connect the rooted speaker in normal ADB mode. Only Homebrew will be updated; system firmware and plugin settings are preserved.", "Подключите рутированную колонку в обычном режиме ADB. Обновится только Homebrew; прошивка system и настройки плагинов сохраняются."),
+    ("Run dependency setup first; ADB is missing.", "ADB не найден. Сначала выполните установку зависимостей."),
+    ("The original ADB private key is missing. Select the existing root workspace.", "Не найден исходный личный ключ ADB. Используйте прежнюю рабочую папку программы получения root."),
     ("Recognized the existing noupdate patch; preserving and completing the OTA block.", "Распознан прежний патч noupdate; сохраняю и дополняю блокировку OTA."),
     ("Cannot load libusb. Download and extract the latest official application release; the USB library is bundled and does not require compiling a driver helper.", "Не удалось загрузить libusb. Скачайте и распакуйте последнюю официальную сборку приложения: USB-библиотека входит в неё, собирать помощник драйвера не нужно."),
     ("Homebrew is installed automatically. The stock Alice service stays enabled.", "Homebrew устанавливается автоматически. Штатная Алиса остаётся включённой."),

@@ -172,6 +172,19 @@ class Workflow:
         self.save_session(config["work"], state="root-verified", serial=serial)
         self.finish_homebrew(dict(config, serial=serial))
 
+    def update_homebrew(self, config):
+        """Maintenance for an already rooted speaker; never captures or flashes."""
+        from .dependencies import find_adb
+        retry = dict(config)
+        retry["adb"] = find_adb(retry.get("adb", ""))
+        if not retry["adb"]:
+            raise RuntimeError("Run dependency setup first; ADB is missing.")
+        if not (Path(retry["work"]) / "keys/adbkey").is_file():
+            raise RuntimeError("The original ADB private key is missing. Select the existing root workspace.")
+        homebrew.resources(resource_root())
+        retry["serial"] = self.verify(retry)
+        self.finish_homebrew(retry)
+
     def finish_homebrew(self, config):
         self.phase("homebrew")
         self.log("Installing Homebrew on the speaker...")

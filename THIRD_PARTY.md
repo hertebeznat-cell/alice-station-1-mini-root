@@ -39,3 +39,5 @@ You may rebuild those libraries, install a modified libusb-package in the build
 venv and rebuild the application. The native driver helper can likewise be
 rebuilt with a modified libwdi and a regenerated SHA-256 manifest. Component
 licenses override the original application's restrictions where applicable.
+
+The bundled Homebrew 0.5.2 includes an unmodified Mozilla CA PEM under MPL-2.0. Source and license notices are in alice-homebrew/internal/homebrew/certs/ and alice-homebrew/licenses/mozilla-ca/. Those files retain MPL-2.0 independently of the original root application license.
