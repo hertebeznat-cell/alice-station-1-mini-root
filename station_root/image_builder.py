@@ -66,6 +66,13 @@ KNOWN_NOUPDATE_SCRIPT = (b'#!/bin/sh\n# disabled by noupdate\n'
 # Confirmed Mini 1 switcher: selects legacy --updatesd or the dedicated updater
 # and its --updater_gateway. Other binaries with this filename are not trusted.
 KNOWN_UPDATER_SWITCHER_SHA256 = "0cc051e648caff435b4bef9d1b310825093ab7ee04ec2db61672f9b7c1fe63cb"
+# Mini 1 1.305.4.16.3237824040.20250721: byte-for-byte identical to the
+# verified switcher except its 20-byte GNU Build ID. Keep exact file hashes;
+# arbitrary build-ID differences or other switcher binaries are not accepted.
+KNOWN_UPDATER_SWITCHER_HASHES = frozenset({
+    KNOWN_UPDATER_SWITCHER_SHA256,
+    "2e191284fb74678a3c62c7dc935fe7c4ceab24c8d7f07c24b82ccad379923930",
+})
 
 
 def launcher_tasks(value):
@@ -92,7 +99,7 @@ def known_updater_switcher(root, task, tasks):
         return False
     binary = Path(root) / "system/vendor/quasar/updater_switcher"
     return (not binary.is_symlink() and binary.is_file() and
-            sha256(binary) == KNOWN_UPDATER_SWITCHER_SHA256)
+            sha256(binary) in KNOWN_UPDATER_SWITCHER_HASHES)
 
 
 def firmware_diagnostics(root, source_hash):
@@ -126,8 +133,8 @@ def firmware_diagnostics(root, source_hash):
                 "/system/vendor/quasar/maind", "/system/vendor/quasar/updater"],
         } for t in tasks if t.get("name") in {"updater", "updater_switcher"} or
             isinstance(t.get("path"), str) and Path(t["path"]).name in {"updater", "updater_switcher"}]
-        report["switcher_hash_matches"] = (report["updater_switcher"].get("sha256") ==
-                                             KNOWN_UPDATER_SWITCHER_SHA256)
+        report["switcher_hash_matches"] = (report["updater_switcher"].get("sha256") in
+                                             KNOWN_UPDATER_SWITCHER_HASHES)
     except (ValueError, RuntimeError):
         report["launch_parse_failed"] = True
     return report

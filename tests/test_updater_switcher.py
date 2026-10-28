@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from station_root.image_builder import disable_ota, KNOWN_UPDATER_SWITCHER_SHA256
+from station_root.image_builder import (disable_ota, KNOWN_UPDATER_SWITCHER_SHA256,
+                                        KNOWN_UPDATER_SWITCHER_HASHES, firmware_diagnostics)
 
 
 class UpdaterSwitcherTests(unittest.TestCase):
@@ -56,6 +57,26 @@ class UpdaterSwitcherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root, vendor, _ = self.fixture(folder)
             self.assert_unchanged_on_failure(root, vendor)
+
+    def test_verified_july_2025_build_preserves_voice_tasks(self):
+        digest = '2e191284fb74678a3c62c7dc935fe7c4ceab24c8d7f07c24b82ccad379923930'
+        self.assertIn(digest, KNOWN_UPDATER_SWITCHER_HASHES)
+        with tempfile.TemporaryDirectory() as folder:
+            root, vendor, data = self.fixture(folder)
+            expected = copy.deepcopy(data)
+            expected['nodes'][0]['tasks'].pop(2)
+            with patch('station_root.image_builder.sha256', return_value=digest):
+                self.assertTrue(firmware_diagnostics(root, '0' * 64)['switcher_hash_matches'])
+                policy = disable_ota(root)
+            self.assertEqual(json.loads((vendor / 'launch.json').read_text()), expected)
+            self.assertEqual(policy['removed_tasks'], ['updater_switcher'])
+            self.assertEqual(policy['source_policy'], 'stock-updater-switcher-v1')
+
+    def test_similar_but_unverified_hash_is_still_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, vendor, _ = self.fixture(folder)
+            with patch('station_root.image_builder.sha256', return_value='2e191284' + '0' * 56):
+                self.assert_unchanged_on_failure(root, vendor)
 
     def test_changed_arguments_or_missing_platformd_are_rejected(self):
         for change in ['flag', 'legacy', 'updater', 'platformd']:
