@@ -20,3 +20,5 @@ This creates `../resources/station-driver-helper.exe` and its SHA-256 JSON manif
 Microsoft redistributable terms and libwdi LGPL/GPL notices are in `../licenses/libwdi/`. The helper and the complete libwdi source/build recipe accompany binary releases. For hardware-validation scope see ../docs/VALIDATION.md.
 
 The separate libusb 1.0.26 LGPL source used by the Python USB backend is also provided under upstream/; it is not part of the libwdi helper. Component download origins/checksums are in upstream/SOURCES.json.
+
+The optional fourth argument is a UTF-16 Windows path for a UTF-8 diagnostic log. Manifest format 2 advertises `diagnostic_log: true`; the application creates a unique per-attempt file, displays the last 45 lines and retains the full native log on disk. Only fixed boot/ADB target IDs are accepted.

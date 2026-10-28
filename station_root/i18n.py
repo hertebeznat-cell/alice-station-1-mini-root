@@ -172,6 +172,22 @@ PAIRS = [
     ("Done: ", "Готово: "),
     ("First run: bash scripts/setup-linux.sh", "Сначала выполните: bash scripts/setup-linux.sh"),
 ]
+PAIRS += [
+    ("Copy full log", "Скопировать весь журнал"),
+    ("Save log…", "Сохранить журнал…"),
+    ("The whole log, including lines above the visible area.", "Весь журнал, включая строки выше видимой области."),
+    ("Full log copied", "Весь журнал скопирован"),
+    ("Log saved: ", "Журнал сохранён: "),
+    ("Automatic log: ", "Автоматический журнал: "),
+    ("Driver installation log: ", "Журнал установки драйвера: "),
+    ("Command: ", "Команда: "),
+    ("Firmware diagnostics saved: ", "Диагностика прошивки сохранена: "),
+    ("Restart Windows, then reconnect the speaker and run dependency setup again. If it repeats, save the full log.",
+     "Перезагрузите Windows, затем переподключите колонку и повторите установку зависимостей. Если ошибка повторится, сохраните весь журнал."),
+    ("Restart Windows and retry dependency setup. If it repeats, save the full log.",
+     "Перезагрузите Windows и повторите установку зависимостей. Если ошибка повторится, сохраните весь журнал."),
+    ("Speaker USB driver installation failed (exit=", "Установка USB-драйвера колонки не завершена (exit="),
+]
 RU = dict(PAIRS)
 EN = {ru: en for en, ru in PAIRS}
 

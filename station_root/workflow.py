@@ -17,6 +17,7 @@ from .usb_transport import Transport, STOCK_SHA256, SYSTEM_SIZE
 from .environment import (prepare_environment, builder_ready, installed_distro,
                           wsl_prefix, MANAGED_PYTHON, run_capture, external_process)
 from . import homebrew
+from .process_output import iter_output
 
 
 def resource_root():
@@ -285,12 +286,13 @@ class Workflow:
 
     def _build_process(self, cmd):
         lines = queue.Queue()
+        tail = []
         environment = os.environ.copy()
+        self.log("Command: " + subprocess.list2cmdline([str(part) for part in cmd]))
         process = external_process(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment,
-                                   text=True, encoding="utf-8", errors="replace",
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         def reader():
-            for line in process.stdout:
+            for line in iter_output(process.stdout):
                 lines.put(line.rstrip())
             process.stdout.close()
         thread = threading.Thread(target=reader, daemon=True)
@@ -298,12 +300,17 @@ class Workflow:
         try:
             while process.poll() is None or thread.is_alive() or not lines.empty():
                 try:
-                    self.log(lines.get(timeout=0.2))
+                    line = lines.get(timeout=0.2)
+                    self.log(line)
+                    if line:
+                        tail.append(line)
+                        del tail[:-8]
                 except queue.Empty:
                     pass
                 self.heartbeat()
             if process.returncode:
-                raise RuntimeError("Сборка образа остановлена. Причина указана выше; запись прошивки не начиналась.")
+                raise RuntimeError("Сборка образа остановлена. Запись прошивки не начиналась. "
+                                   f"Exit code: {process.returncode}\n" + "\n".join(tail))
         finally:
             if process.poll() is None:
                 process.terminate()

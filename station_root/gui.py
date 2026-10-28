@@ -9,8 +9,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from .workflow import Workflow, resource_root
-from .dependencies import Dependencies, default_workspace
+from .dependencies import Dependencies, default_workspace, data_root
 from .i18n import tr, translate_message
+from .journal import Journal, header
+from . import __version__
 
 
 class App:
@@ -26,6 +28,10 @@ class App:
         self.busy, self.connected, self.dependencies_ready = False, False, False
         self.inspect_pending = True
         self.raw_logs = []
+        try:
+            self.journal = Journal(data_root() / "logs", __version__)
+        except OSError:
+            self.journal = None
         self.last_progress = 0
         self.workflow = Workflow(self.log, self.progress)
         self.workflow.phase = lambda phase: self.events.put(("phase", phase))
@@ -33,7 +39,7 @@ class App:
         self.values = {key: tk.StringVar(value=settings.get(key, default)) for key, default in {
             "work": str(default_workspace()), "adb": "", "distro": "", "builder_python": ""}.items()}
         self.frame = None
-        root.title("Station Mini Root 0.3.12 · YNDX-0004")
+        root.title(f"Station Mini Root {__version__} · YNDX-0004")
         root.geometry("840x640")
         root.minsize(760, 580)
         style = ttk.Style()
@@ -44,6 +50,8 @@ class App:
         self.thread = threading.Thread(target=self.worker, daemon=True)
         self.thread.start()
         self.jobs.put(("inspect", self.config()))
+        if self.journal:
+            self.log("Automatic log: " + str(self.journal.path))
         root.after(100, self.poll)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -98,6 +106,11 @@ class App:
         self.cancel_button.pack(side="right")
         self.bar = ttk.Progressbar(frame, maximum=100)
         self.bar.pack(fill="x", pady=8)
+        log_actions = ttk.Frame(frame)
+        log_actions.pack(fill="x", pady=(0, 5))
+        ttk.Button(log_actions, text=self.text("Copy full log"), command=self.copy_log).pack(side="left")
+        ttk.Button(log_actions, text=self.text("Save log…"), command=self.save_log).pack(side="left", padx=6)
+        ttk.Label(log_actions, text=self.text("The whole log, including lines above the visible area.")).pack(side="left")
         self.output = ScrolledText(frame, height=10, state="disabled", font=("Consolas", 10), background="#16212c", foreground="#d7e5ee")
         self.output.pack(fill="both", expand=True)
         self.render_logs()
@@ -130,7 +143,34 @@ class App:
         self.set_busy(self.busy)
         self.save_settings()
 
-    def log(self, text): self.events.put(("log", str(text)))
+    def log(self, text):
+        if self.journal:
+            try:
+                self.journal.append(text)
+            except OSError:
+                pass  # Logging must never interrupt a USB operation.
+        self.events.put(("log", str(text)))
+
+    def full_log(self):
+        return header(__version__) + "".join(stamp + translate_message(text, self.language) + "\n"
+                                             for stamp, text in self.raw_logs)
+
+    def copy_log(self):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.full_log())
+        self.status.set(self.text("Full log copied"))
+
+    def save_log(self):
+        path = filedialog.asksaveasfilename(title=self.text("Save log…"),
+            initialfile="StationMiniRoot.log", defaultextension=".log",
+            filetypes=[("Log", "*.log"), ("Text", "*.txt")])
+        if not path:
+            return
+        try:
+            Path(path).write_text(self.full_log(), encoding="utf-8")
+            self.status.set(self.text("Log saved: ") + path)
+        except OSError as exc:
+            messagebox.showerror(self.text("Operation stopped"), str(exc))
 
     def render_logs(self):
         self.output["state"] = "normal"

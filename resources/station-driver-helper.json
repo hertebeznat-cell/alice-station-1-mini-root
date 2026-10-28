@@ -1,6 +1,7 @@
 {
-  "format": 1,
-  "sha256": "1aeda0a4376321f93f382f2f9d59609ce800a6db6b828992e85b4459a0a25460",
+  "format": 2,
+  "diagnostic_log": true,
+  "sha256": "d42cdd7407e5da0d2ed20430afdba1e29777e94c266778fc80e41ae7df24c47d",
   "libwdi": "1.5.1",
   "target": "windows-x64"
 }

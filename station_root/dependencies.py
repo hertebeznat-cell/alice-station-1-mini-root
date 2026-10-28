@@ -13,6 +13,8 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
+import uuid
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from .environment import builder_ready, discover_distros, run_capture, MANAGED_PYTHON, run_elevated
@@ -178,9 +180,23 @@ def install_driver(resources, mode, log=print):
     dest = data_root() / "drivers" / mode
     dest.mkdir(parents=True, exist_ok=True)
     log("Installing the speaker USB driver. Confirm the Windows administrator prompt.")
-    code = run_elevated(str(helper), [mode, str(dest)])
+    diagnostic = dest / ("install-" + datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8] + ".log")
+    arguments = [mode, str(dest)]
+    if manifest.get("diagnostic_log"):
+        arguments.append(str(diagnostic))
+    try:
+        code = run_elevated(str(helper), arguments)
+    finally:
+        if diagnostic.is_file():
+            from .environment import decode_output
+            log("Driver installation log: " + str(diagnostic))
+            # Keep the complete native log on disk; bound the GUI excerpt.
+            detail = decode_output(diagnostic.read_bytes()[-65536:])
+            for line in detail.splitlines()[-45:]:
+                log("WinUSB: " + line)
     if code:
-        raise RuntimeError("Speaker USB driver installation failed or was declined")
+        raise RuntimeError(f"Speaker USB driver installation failed (exit={code}). "
+                           "Restart Windows and retry dependency setup. If it repeats, save the full log.")
 
 
 class Dependencies:

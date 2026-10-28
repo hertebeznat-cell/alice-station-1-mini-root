@@ -29,7 +29,7 @@ import json
 import sys
 binary = Path(sys.argv[1])
 binary.with_suffix('.json').write_text(json.dumps({
-    'format': 1, 'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
+    'format': 2, 'diagnostic_log': True, 'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
     'libwdi': '1.5.1', 'target': 'windows-x64'
 }, indent=2) + '\n', encoding='utf-8')
 PY

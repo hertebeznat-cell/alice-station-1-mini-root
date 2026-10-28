@@ -21,7 +21,8 @@ class USBBackendError(RuntimeError):
     def __init__(self, operation):
         self.operation = operation
         super().__init__("USB operation is not supported: " + operation +
-                         " (LIBUSB_ERROR_NOT_SUPPORTED). Reconnect the speaker and run dependency setup again.")
+                         " (LIBUSB_ERROR_NOT_SUPPORTED). Restart Windows, then reconnect the speaker "
+                         "and run dependency setup again. If it repeats, save the full log.")
 
 
 class BackendAdapter:

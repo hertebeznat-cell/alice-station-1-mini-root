@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from .process_output import decode_output
 
 MANAGED_PYTHON = "/opt/station-mini-root/venv/bin/python"
 _launch_lock = threading.Lock()
@@ -22,16 +23,6 @@ class RestartRequired(RuntimeError):
 
 class WSLUnavailable(RuntimeError):
     pass
-
-
-def decode_output(data):
-    if isinstance(data, str):
-        return data
-    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
-        return data.decode("utf-16", errors="replace")
-    if b"\x00" in data[:200]:
-        return data.decode("utf-16-le", errors="replace").lstrip("\ufeff")
-    return data.decode("utf-8", errors="replace")
 
 
 def external_process(command, **kwargs):
@@ -192,7 +183,7 @@ def run_elevated(executable, arguments, visible=False):
         raise OSError(ctypes.get_last_error(), "Windows declined installation / UAC")
     try:
         if kernel.WaitForSingleObject(info.hProcess, 30 * 60 * 1000) != 0:
-            raise TimeoutError("WSL installer is still running. Reopen setup after it finishes.")
+            raise TimeoutError("Windows installer is still running. Reopen setup after it finishes.")
         code = wintypes.DWORD()
         if not kernel.GetExitCodeProcess(info.hProcess, ctypes.byref(code)):
             raise ctypes.WinError(ctypes.get_last_error())

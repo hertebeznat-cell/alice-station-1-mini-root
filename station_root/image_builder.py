@@ -95,6 +95,44 @@ def known_updater_switcher(root, task, tasks):
             sha256(binary) == KNOWN_UPDATER_SWITCHER_SHA256)
 
 
+def firmware_diagnostics(root, source_hash):
+    """Export only version/check results and hashes, never account configs or keys."""
+    root = Path(root)
+    vendor = root / "system/vendor/quasar"
+    report = {"format": 1, "builder_version": __version__, "source_sha256": source_hash,
+              "stage": "rootfs-patch-failed", "firmware_written": False}
+    for name in ("version_full", "launch.json", "updater_switcher"):
+        path = vendor / name
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root.resolve()):
+            report[name] = {"present_regular_file": False}
+            continue
+        report[name] = {"bytes": path.stat().st_size, "sha256": sha256(path)}
+        if name == "version_full" and path.stat().st_size <= 256:
+            value = path.read_text(encoding="utf-8", errors="replace").strip()
+            if re.fullmatch(r"[A-Za-z0-9._-]{1,150}", value):
+                report[name]["version"] = value
+    launch = vendor / "launch.json"
+    if report["launch.json"].get("present_regular_file") is False:
+        return report
+    try:
+        tasks = list(launcher_tasks(json.loads(launch.read_text(encoding="utf-8"))))
+        report["platformd_main_matches"] = any(
+            t.get("name") == "maind" and t.get("path") == "/system/vendor/quasar/maind"
+            and t.get("arg") == ["--platformd"] for t in tasks)
+        report["switcher_checks"] = [{
+            "name_matches": t.get("name") == "updater_switcher",
+            "path_matches": t.get("path") == "/system/vendor/quasar/updater_switcher",
+            "arguments_match": t.get("arg") == ["/data/quasar/use_updater",
+                "/system/vendor/quasar/maind", "/system/vendor/quasar/updater"],
+        } for t in tasks if t.get("name") in {"updater", "updater_switcher"} or
+            isinstance(t.get("path"), str) and Path(t["path"]).name in {"updater", "updater_switcher"}]
+        report["switcher_hash_matches"] = (report["updater_switcher"].get("sha256") ==
+                                             KNOWN_UPDATER_SWITCHER_SHA256)
+    except (ValueError, RuntimeError):
+        report["launch_parse_failed"] = True
+    return report
+
+
 def known_noupdate_policy(root, tasks):
     """Recognize the previously installed noupdate patch, not arbitrary absence.
 
@@ -276,7 +314,17 @@ def build(source, public_key, destination, block_updates=True):
         if len(roots) != 1:
             raise RuntimeError("Ожидался один UBI-том rootfs")
         root = roots[0]
-        marker = patch_rootfs(root, key_text, block_updates)
+        try:
+            marker = patch_rootfs(root, key_text, block_updates)
+        except RuntimeError:
+            diagnostic = destination.with_suffix(".diagnostics.json")
+            try:
+                diagnostic.write_text(json.dumps(firmware_diagnostics(root, source_hash),
+                    ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                print("Firmware diagnostics saved: " + str(diagnostic), flush=True)
+            except (OSError, ValueError) as error:
+                print("Could not save firmware diagnostics: " + str(error), flush=True)
+            raise
         if marker.get("ota_policy", {}).get("source_policy") == "noupdate-v1":
             print("Recognized the existing noupdate patch; preserving and completing the OTA block.", flush=True)
         if marker.get("ota_policy", {}).get("source_policy") == "stock-updater-switcher-v1":
