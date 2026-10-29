@@ -1,4 +1,5 @@
 """Decode Linux UTF-8 and Windows/WSL UTF-16 output, including mixed streams."""
+
 from __future__ import annotations
 
 import io
@@ -14,14 +15,14 @@ def _encoding(data):
     if data.startswith(b"\x00\n"):
         return "utf-16-be"
     end = data.find(b"\n")
-    sample = data[:min(192, end + 1 if end >= 0 else len(data))]
+    sample = data[: min(192, end + 1 if end >= 0 else len(data))]
     even, odd = sample[::2], sample[1::2]
     if b"\x00" in sample:
         return "utf-16-le" if odd.count(0) >= even.count(0) else "utf-16-be"
     # A Russian UTF-16 line need not contain NUL until its first space.
-    if len(odd) >= 2 and sum(value <= 8 for value in odd) >= len(odd) * .75:
+    if len(odd) >= 2 and sum(value <= 8 for value in odd) >= len(odd) * 0.75:
         return "utf-16-le"
-    if len(even) >= 2 and sum(value <= 8 for value in even) >= len(even) * .75:
+    if len(even) >= 2 and sum(value <= 8 for value in even) >= len(even) * 0.75:
         return "utf-16-be"
     return "utf-8-sig"
 

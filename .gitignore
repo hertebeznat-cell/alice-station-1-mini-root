@@ -28,3 +28,6 @@ manager-update.json
 state-before-manager-update.json
 *.pem
 *.key
+
+# Downloaded by scripts/prepare-homebrew.py
+alice-homebrew/

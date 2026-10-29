@@ -19,7 +19,9 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-      - run: python -m pip install -r requirements.txt
+      - run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m ruff check .
+      - run: python -m ruff format --check .
       - run: python -m unittest discover -s tests -v
       - name: Load bundled native USB runtime
         shell: python

@@ -3,12 +3,12 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 
 from station_root.workflow import Workflow
-from station_root.image_builder import disable_ota, patch_rootfs
+from station_root.image_builder import disable_ota
 from station_root.environment import decode_output, select_distro, prepare_environment, RestartRequired
-from station_root.i18n import tr, translate_message, PAIRS
+from station_root.i18n import tr, translate_message
 
 
 class UpdatesTests(unittest.TestCase):
@@ -16,10 +16,18 @@ class UpdatesTests(unittest.TestCase):
         root = Path(folder)
         vendor = root / "system/vendor/quasar"
         vendor.mkdir(parents=True)
-        launch = {"nodes": [{"name": "main", "tasks": [
-            {"name": "updatesd", "arg": ["--updatesd"]},
-            {"name": "maind", "arg": ["--platformd"]},
-            {"name": "mediad", "arg": ["--mediad"]}]}]}
+        launch = {
+            "nodes": [
+                {
+                    "name": "main",
+                    "tasks": [
+                        {"name": "updatesd", "arg": ["--updatesd"]},
+                        {"name": "maind", "arg": ["--platformd"]},
+                        {"name": "mediad", "arg": ["--mediad"]},
+                    ],
+                }
+            ]
+        }
         (vendor / "launch.json").write_text(json.dumps(launch))
         (vendor / "device_ota_update.sh").write_text("#!/bin/sh\napply_packed_ota file\nreboot\n")
         (vendor / "a01localupdate").write_bytes(b"ELF-original-updater")
@@ -73,10 +81,12 @@ class PipelineTests(unittest.TestCase):
             flow.adb_binary = Mock(return_value="adb")
             flow._build_process = Mock()
             digest = "f" * 64
-            with patch("station_root.workflow.sys.platform", "linux"), \
-                 patch("station_root.workflow.sha256", return_value=digest), \
-                 patch("station_root.workflow.validate_public_key"), \
-                 patch("station_root.workflow.validate_image", return_value={"source_sha256": digest}):
+            with (
+                patch("station_root.workflow.sys.platform", "linux"),
+                patch("station_root.workflow.sha256", return_value=digest),
+                patch("station_root.workflow.validate_public_key"),
+                patch("station_root.workflow.validate_image", return_value={"source_sha256": digest}),
+            ):
                 output = flow.prepare({"source": str(source), "work": d})
             self.assertIn(digest[:16], output.name)
             flow._build_process.assert_called_once()
@@ -87,15 +97,18 @@ class PipelineTests(unittest.TestCase):
         steps = []
         flow.adb_binary = Mock(return_value="adb")
         flow.ensure_environment = Mock(side_effect=lambda cfg, **kwargs: steps.append("environment"))
-        flow.backup = Mock(side_effect=lambda work: (steps.append("backup") or (Path(folder) / "original.bin", "f" * 64)))
-        flow.prepare = Mock(side_effect=lambda cfg: (steps.append("build") or Path(folder) / "image.ubi"))
+        flow.backup = Mock(side_effect=lambda work: steps.append("backup") or (Path(folder) / "original.bin", "f" * 64))
+        flow.prepare = Mock(side_effect=lambda cfg: steps.append("build") or Path(folder) / "image.ubi")
         flow.flash = Mock(side_effect=lambda *args, **kwargs: steps.append("flash"))
         flow.reboot = Mock(side_effect=lambda: steps.append("reboot"))
-        flow.verify = Mock(side_effect=lambda *args, **kwargs: (steps.append("root") or "test-speaker"))
+        flow.verify = Mock(side_effect=lambda *args, **kwargs: steps.append("root") or "test-speaker")
         bundle = patch("station_root.workflow.homebrew.resources")
         bundle.start()
         self.addCleanup(bundle.stop)
-        deployment = patch("station_root.workflow.homebrew.install", side_effect=lambda *args: (steps.append("homebrew") or "http://192.0.2.10:8088"))
+        deployment = patch(
+            "station_root.workflow.homebrew.install",
+            side_effect=lambda *args: steps.append("homebrew") or "http://192.0.2.10:8088",
+        )
         flow.homebrew_deploy_mock = deployment.start()
         self.addCleanup(deployment.stop)
         return flow, steps
@@ -103,7 +116,9 @@ class PipelineTests(unittest.TestCase):
     def test_single_click_order_and_persistent_rollback_record(self):
         with tempfile.TemporaryDirectory() as d:
             flow, steps = self.pipeline(d)
-            with patch("station_root.workflow.validate_image", return_value={"source_sha256": "f" * 64, "ota_disabled": True}):
+            with patch(
+                "station_root.workflow.validate_image", return_value={"source_sha256": "f" * 64, "ota_disabled": True}
+            ):
                 flow.install({"work": d})
             self.assertEqual(steps, ["environment", "backup", "build", "flash", "reboot", "root", "homebrew"])
             flow.backup.assert_called_once()
@@ -130,14 +145,19 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             flow, steps = self.pipeline(d)
             flow.homebrew_deploy_mock.side_effect = RuntimeError("disk full")
-            with patch("station_root.workflow.validate_image", return_value={"source_sha256": "f" * 64, "ota_disabled": True}):
-                with self.assertRaisesRegex(RuntimeError, "ADB root is confirmed"):
-                    flow.install({"work": d})
+            with (
+                patch(
+                    "station_root.workflow.validate_image",
+                    return_value={"source_sha256": "f" * 64, "ota_disabled": True},
+                ),
+                self.assertRaisesRegex(RuntimeError, "ADB root is confirmed"),
+            ):
+                flow.install({"work": d})
             state = json.loads((Path(d) / "session.json").read_text())
             self.assertEqual(state["state"], "homebrew-pending")
             self.assertEqual(state["serial"], "test-speaker")
             steps.clear()
-            flow.homebrew_deploy_mock.side_effect = lambda *args: (steps.append("homebrew") or "http://192.0.2.10:8088")
+            flow.homebrew_deploy_mock.side_effect = lambda *args: steps.append("homebrew") or "http://192.0.2.10:8088"
             flow.install({"work": d})
             self.assertEqual(steps, ["root", "homebrew"])
             self.assertEqual(flow.flash.call_count, 1)
@@ -187,10 +207,13 @@ class PipelineTests(unittest.TestCase):
             original = work / "original.bin"
             original.write_bytes(b"ORIGINAL")
             from station_root.image_builder import sha256
+
             flow = Workflow(log=lambda text: None)
             flow.transport = Mock()
             flow.restore, flow.reboot = Mock(), Mock()
-            flow.save_session(work, restore_eligible=True, original_backup=str(original), source_sha256=sha256(original))
+            flow.save_session(
+                work, restore_eligible=True, original_backup=str(original), source_sha256=sha256(original)
+            )
             flow.unroot({"work": d})
             flow.restore.assert_called_once_with({"work": d}, original)
             flow.reboot.assert_called_once()
@@ -220,10 +243,12 @@ class EnvironmentTests(unittest.TestCase):
 
     def test_missing_wsl_installs_features_then_stops_for_restart(self):
         runner = Mock()
-        with patch("station_root.environment.sys.platform", "win32"), \
-             patch("station_root.environment.list_distros", return_value=[]), \
-             patch("station_root.environment.shutil.which", return_value=None), \
-             patch("station_root.environment.elevate_wsl_install", return_value=0) as elevate:
+        with (
+            patch("station_root.environment.sys.platform", "win32"),
+            patch("station_root.environment.list_distros", return_value=[]),
+            patch("station_root.environment.shutil.which", return_value=None),
+            patch("station_root.environment.elevate_wsl_install", return_value=0) as elevate,
+        ):
             with self.assertRaises(RestartRequired):
                 prepare_environment({}, lambda text: None, runner, Path("."))
             elevate.assert_called_once()
@@ -231,13 +256,18 @@ class EnvironmentTests(unittest.TestCase):
 
     def test_existing_distro_uses_selected_root_builder(self):
         runner = Mock()
-        with patch("station_root.environment.sys.platform", "win32"), \
-             patch("station_root.environment.list_distros", return_value=["Debian"]), \
-             patch("station_root.environment.probe_distro", return_value="compatible"), \
-             patch("station_root.environment.run_capture", return_value=(0, "/mnt/c/setup.sh", "")):
+        with (
+            patch("station_root.environment.sys.platform", "win32"),
+            patch("station_root.environment.list_distros", return_value=["Debian"]),
+            patch("station_root.environment.probe_distro", return_value="compatible"),
+            patch("station_root.environment.run_capture", return_value=(0, "/mnt/c/setup.sh", "")),
+        ):
             result = prepare_environment({}, lambda text: None, runner, Path("."))
         self.assertEqual(result, "Debian")
-        self.assertEqual(runner.call_args.args[0], ["wsl.exe", "--distribution", "Debian", "--user", "root", "--exec", "bash", "/mnt/c/setup.sh"])
+        self.assertEqual(
+            runner.call_args.args[0],
+            ["wsl.exe", "--distribution", "Debian", "--user", "root", "--exec", "bash", "/mnt/c/setup.sh"],
+        )
 
 
 class LanguageTests(unittest.TestCase):
@@ -248,7 +278,12 @@ class LanguageTests(unittest.TestCase):
         self.assertEqual(en, "Reading system (80 MiB), backup: C:/Workspace/test.bin")
 
     def test_ui_primary_controls_are_translated(self):
-        for phrase in ("Install root", "Return without root", "Setup WSL / builder", "Disable Yandex automatic updates"):
+        for phrase in (
+            "Install root",
+            "Return without root",
+            "Setup WSL / builder",
+            "Disable Yandex automatic updates",
+        ):
             self.assertNotEqual(tr(phrase, "ru"), phrase)
             self.assertEqual(tr(phrase, "en"), phrase)
 

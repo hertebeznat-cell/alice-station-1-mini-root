@@ -1,60 +1,86 @@
-# Station Mini Root 0.3.14
+# Station Mini Root
 
-[Русский](README.md) · [Windows / Linux downloads](https://github.com/hertebeznat-cell/alice-station-1-mini-root/releases/tag/v0.3.14) · [Method](docs/METHOD.md) · [Validation](docs/VALIDATION.md)
+[Русский](README.md) · [Download](https://github.com/hertebeznat-cell/alice-station-1-mini-root/releases/latest) · [How the method works](docs/METHOD.md) · [Supported firmware](docs/FIRMWARE.md)
 
-USB ADB root application for **Yandex Station Mini 1, YNDX-0004 / Amlogic A113X**. English/Russian UI; Windows x64 and Linux x86_64. Windows uses a compatible Debian/Ubuntu WSL builder and can install official Debian when needed.
+Gets **ADB root on Yandex Station Mini, 1st generation** (YNDX-0004, Amlogic A113X) and installs [Alice Homebrew](https://github.com/hertebeznat-cell/alice-homebrew), a web panel with plugins. Windows x64 and Linux x86_64, English and Russian UI.
 
-## Use
+Other speaker models are not supported, and the app checks for that itself.
 
-The Windows executable includes libusb and the WinUSB helper; end users do not compile them. If 0.3.8 reports a missing libusb, close it, download 0.3.14 and retry dependency setup. Existing WSL, ADB, workspaces and backups are preserved.
+## How to use
 
-1. Download and extract your platform archive. Run StationMiniRoot.exe on Windows, or `chmod +x StationMiniRoot && ./StationMiniRoot` on Linux.
-2. Click **Install all dependencies**. ADB is detected or downloaded from Google, the Linux builder is prepared, and the matching USB driver/udev rules are configured. Accept native Windows UAC/driver trust prompts yourself.
-3. Connect Mini 1 with a data-capable USB cable when prompted. The owner's confirmed method does not require holding speaker buttons: the program captures the TPL loader and keeps it active through USB polling. Root/restore stay locked until readiness succeeds.
-4. Click **Install root** and confirm YNDX-0004. The program saves the complete 80 MiB system, patches/builds from that backup, writes only system, verifies a full read-back and SHA-256, reboots and verifies ADB uid=0.
-5. Homebrew 0.5.3 and its boot hook install automatically after root verification. Open the speaker IP on port 8088 without a login/token. Homebrew checks stable manager updates every five hours. AirPlay and other plugins are separate installations.
+1. Download the archive for your system and extract it.
+   Windows: `StationMiniRoot.exe`. Linux: `chmod +x StationMiniRoot && ./StationMiniRoot`.
+2. **Install all dependencies.** The app finds or downloads ADB; on Windows it prepares WSL with the image builder, on Linux the tools and udev rules. Confirm UAC and driver-trust prompts in the system windows.
+3. Connect the Mini 1 with a data USB cable when asked. No buttons need to be held: the app catches the bootloader and keeps it.
+4. **Install root.** Everything else is automatic: backup → image build → write → verify → reboot → root check → Alice Homebrew install.
+5. Open `http://SPEAKER-IP:8088` — the Homebrew panel. No login.
 
-Keep USB and power connected during write/read-back. Other speaker models are unsupported. The Linux release targets Ubuntu 24.04 / glibc 2.39; build on the target system when using an older distribution.
+Keep power and the cable connected while writing.
 
-Only recognized stock OTA paths are disabled. Stock Alice, unrelated applications and other firmware partitions are preserved. A failed Homebrew deployment can resume without reflashing. This uses accessible TPL/U-Boot and does not establish an unpatchable BootROM exploit. See docs/METHOD.md.
+## What changes on the speaker
 
-## Backup / restore
-
-Workspace: `%LOCALAPPDATA%\StationMiniRoot\work` on Windows, `${XDG_DATA_HOME:-~/.local/share}/StationMiniRoot/work` on Linux. Existing saved/legacy workspaces are reused. Preserve this folder and never publish it: it contains your private ADB key, firmware backup and session record.
-
-Restore backup returns the exact pre-change system and its OTA behavior, with a backup of the current system and a full read-back check. A previously modified source restores that previous modification, not a factory image. Homebrew data resides in /data; restoring system is not a promise to remove it.
-
-## Build
-
-```bash
-python -m pip install -r requirements.txt pyinstaller==6.16.0
-python scripts/prepare-homebrew.py
-python -m unittest discover -s tests -v
-python scripts/build-app.py
+```text
+backup system (80 MiB) → patch ADB and OTA → build the image from your backup
+→ write system → full read-back and SHA-256 check
+→ boot → check uid=0 over ADB → install Alice Homebrew into /data
 ```
 
-Build natively for each platform. On Windows first build the LGPL driver helper as described in native/README.md, using the separately obtained Microsoft WDK redistributables. The helper targets only the speaker boot/ADB functions, preserves composite/RNDIS interfaces and does not disable driver-signature enforcement.
+- **Only the system partition** is rewritten. Bootloader, boot, nv and user data are untouched.
+- Stock Alice and its services keep running.
+- Yandex firmware updates are disabled, otherwise an update writes a factory system back and root is lost. Only known update mechanisms are disabled; an unknown firmware layout stops the build **before writing** ([details](docs/FIRMWARE.md)).
+- If Homebrew fails to install, running Install root again finishes it without reflashing.
 
-The Homebrew preparer downloads the pinned official 0.4.1 ARM64 binary and checks its SHA-256/size. Homebrew sources are included under alice-homebrew/ and keep their separate licenses. You can build that service with Go 1.26.5 instead; the Russian README includes the cross-build command.
+## Backup and restore
 
-Windows source launch: create a venv, install requirements.txt, then run station_mini_root.py. Debian/Ubuntu source setup: `bash scripts/setup-linux.sh`, followed by `bash start-linux.sh`.
+Workspace:
 
-## License
+- Windows: `%LOCALAPPDATA%\StationMiniRoot\work`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/StationMiniRoot/work`
 
-Original application code is source-available under the proprietary LICENSE: personal non-commercial use of official binaries is permitted; reuse/redistribution of original source and publication of modified versions require prior written permission. This is not an open-source license. GitHub's own viewing/forking terms still apply.
+It holds your private ADB key, the original system backup and `session.json`. **Keep it and never publish it.**
 
-The MIT transport, LGPL helper/libusb, MIT Homebrew and third-party components retain their licenses. See THIRD_PARTY.md, licenses/ and native/upstream/. No personal keys, device dumps, accounts or proprietary firmware images are distributed.
+Restore backup writes the original system back (with a read-back check) and returns the factory update behavior. Homebrew lives in `/data`; restoring system does not remove it.
 
-## Existing noupdate patch
+## Update Homebrew without flashing
 
-0.3.14 accepts the recognized older noupdate patch only when the exact inert apply script and the normal Mini 1 main task are present. Other startup tasks are preserved and known OTA entry points are blocked. Arbitrary absence of updatesd still stops the build. If 0.3.9 stopped at this check before flashing, close it and retry Install root using 0.3.14 while keeping the same workspace, keys, backups and WSL.
+Connect the already rooted speaker over ADB to the same computer and choose "Update Homebrew only (ADB root)". The original workspace with the ADB key is required. After that Homebrew updates itself from its own panel.
 
-## Homebrew-only maintenance
+## Build from source
 
-For an already rooted speaker, connect normal ADB on the original PC and choose Update Homebrew only (ADB root). The original authorized key is required. No TPL capture or system image flashing occurs. This also bootstraps Homebrew 0.5.3 when the older manager cannot update because its firmware has no usable CA store.
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.16.0
+.venv/bin/python scripts/prepare-homebrew.py   # downloads the pinned Homebrew release and checks SHA-256
+.venv/bin/python -m unittest discover -s tests
+.venv/bin/python -m ruff check . && .venv/bin/python -m ruff format --check .
+.venv/bin/python scripts/build-app.py
+```
 
-## Verified updater_switcher firmware
+On Windows use `.venv\Scripts\python`. For the Windows build, first build the WinUSB helper: [native/README.md](native/README.md). Running from source: `python station_mini_root.py` (Linux: `bash scripts/setup-linux.sh`, then `bash start-linux.sh`).
 
-0.3.14 recognizes the confirmed Mini 1 switcher by exact startup arguments, the normal platformd task and the switcher SHA-256. Only OTA startup is removed; other launcher tasks and metadata are preserved. Unknown variants still stop before flashing. If an earlier build failed at the missing-updatesd check, close it and retry Install root with 0.3.14 while retaining the workspace, authorized key, backups and WSL.
+Building an image by hand from **your own** backup:
 
-0.3.14 also recognizes the verified switcher from firmware `1.305.4.16.3237824040.20250721`. Only its GNU Build ID differs from the first verified binary. Its exact full hash is allowlisted; unknown binaries remain rejected.
+```bash
+adb keygen /path/to/adbkey
+bash scripts/build_image.sh system-backup.bin /path/to/adbkey.pub output.ubi
+```
+
+### Code layout
+
+| Module | Purpose |
+| --- | --- |
+| `station_root/mini1.py` | Everything known about the Mini 1: USB IDs, partition size, UBI geometry, firmware paths |
+| `station_root/data/known-firmware.json` | Allowlist of verified updater binaries |
+| `station_root/usb_transport.py` | Reading and writing the system partition through the bootloader |
+| `station_root/image_builder.py` | Rootfs patch and UBI build (Linux/WSL, under fakeroot) |
+| `station_root/adb.py` | Root check over ADB without touching your ADB server |
+| `station_root/workflow.py` | Step order: backup → image → write → verify → Homebrew |
+| `station_root/gui.py` | Application window |
+
+## Licenses
+
+The original code is source-available under [proprietary terms](LICENSE): the official program may be used personally and non-commercially; redistribution and modified versions require the author's written permission. This is not open source.
+
+The USB transport (MIT, based on pyamlboot), WinUSB helper and libusb (LGPL), Alice Homebrew (MIT) and other components keep their own licenses: [THIRD_PARTY.md](THIRD_PARTY.md), `licenses/`, `native/upstream/`.
+
+Yandex firmware, built images, keys and dumps are not part of the repository or releases.

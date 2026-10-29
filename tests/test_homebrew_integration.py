@@ -22,9 +22,11 @@ class HomebrewBundleTests(unittest.TestCase):
         module = types.SimpleNamespace(main=Mock(return_value="http://192.0.2.10:8088"))
         loader = Mock()
         spec = types.SimpleNamespace(loader=loader)
-        with patch.object(homebrew, "resources", return_value=(Path("installer.py"), Path("arm64"))), \
-             patch.object(homebrew.importlib.util, "spec_from_file_location", return_value=spec), \
-             patch.object(homebrew.importlib.util, "module_from_spec", return_value=module):
+        with (
+            patch.object(homebrew, "resources", return_value=(Path("installer.py"), Path("arm64"))),
+            patch.object(homebrew.importlib.util, "spec_from_file_location", return_value=spec),
+            patch.object(homebrew.importlib.util, "module_from_spec", return_value=module),
+        ):
             url = homebrew.install("bundle", {"adb": "adb", "work": "workspace", "serial": "speaker"})
         self.assertEqual(url, "http://192.0.2.10:8088")
         args = module.main.call_args.args[0]

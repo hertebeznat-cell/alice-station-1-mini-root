@@ -14,21 +14,23 @@ from station_root.workflow import Workflow, validate_image
 class SafetyTests(unittest.TestCase):
     def test_reset_accepts_expected_usb_disconnect(self):
         from usb.core import USBError
+
         device = Mock()
         device.ctrl_transfer.side_effect = USBError("device gone", errno=19)
         usb.Transport(device).reboot()
 
     def test_reset_does_not_hide_other_usb_errors(self):
         from usb.core import USBError
+
         device = Mock()
         device.ctrl_transfer.side_effect = USBError("I/O error", errno=5)
         with self.assertRaises(USBError):
             usb.Transport(device).reboot()
+
     def test_only_unlocked_known_tpl_is_accepted(self):
         usb.Transport.validate_identify(bytes.fromhex("0007001000000000"))
         usb.Transport.validate_identify(bytes.fromhex("0008001000000000"))
-        for ident in (b"", bytes.fromhex("0007000000000000"),
-                      bytes.fromhex("0007001001000000")):
+        for ident in (b"", bytes.fromhex("0007000000000000"), bytes.fromhex("0007001001000000")):
             with self.subTest(ident=ident), self.assertRaises(RuntimeError):
                 usb.Transport.validate_identify(ident)
 
@@ -51,9 +53,14 @@ class SafetyTests(unittest.TestCase):
         flow = Workflow(log=lambda s: None)
         flow.transport = Mock()
         flow.backup = Mock(return_value=(Path("saved.bin"), "different-firmware"))
-        with patch("station_root.workflow.validate_image", return_value={"image_sha256": "test", "source_sha256": "expected"}):
-            with self.assertRaises(ValueError):
-                flow.flash({"work": "."})
+        with (
+            patch(
+                "station_root.workflow.validate_image",
+                return_value={"image_sha256": "test", "source_sha256": "expected"},
+            ),
+            self.assertRaises(ValueError),
+        ):
+            flow.flash({"work": "."})
         flow.backup.assert_called_once()
         flow.transport.write_system.assert_not_called()
 
@@ -61,9 +68,11 @@ class SafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             flow = Workflow(log=lambda s: None)
             flow.transport = Mock()
+
             def broken(output, progress):
                 output.write_bytes(b"partial data")
                 raise OSError("USB lost")
+
             flow.transport.read_system.side_effect = broken
             with self.assertRaises(OSError):
                 flow.backup(d)
@@ -112,10 +121,10 @@ class SafetyTests(unittest.TestCase):
             transport.command = Mock()
             transport.endpoints = Mock(return_value=(Mock(), endpoint))
             transport.write_system(image)
-            self.assertEqual([c.args[0] for c in transport.command.call_args_list],
-                             ["disk_initial 0", "download get_status"])
-            self.assertEqual(device.ctrl_transfer.call_args_list[0].args[4],
-                             b"download store system normal 0x10000\0")
+            self.assertEqual(
+                [c.args[0] for c in transport.command.call_args_list], ["disk_initial 0", "download get_status"]
+            )
+            self.assertEqual(device.ctrl_transfer.call_args_list[0].args[4], b"download store system normal 0x10000\0")
             request = device.ctrl_transfer.call_args_list[2].args[4]
             values = struct.unpack("<IIIIHH", request[:20])
             self.assertEqual(values, (0, 65536, 0, 16384, 0xEF, 512))

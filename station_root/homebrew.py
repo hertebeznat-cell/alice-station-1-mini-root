@@ -2,6 +2,7 @@
 
 This step never changes the stock Alice startup hook or removes other apps.
 """
+
 import importlib.util
 from pathlib import Path
 
@@ -26,8 +27,16 @@ def install(root, config, log=print):
     spec = importlib.util.spec_from_file_location("alice_homebrew_installer", installer)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    args = ["--adb", config["adb"], "--key", str(Path(config["work"]) / "keys/adbkey"),
-            "--binary", str(binary), "--install", "--autostart"]
+    args = [
+        "--adb",
+        config["adb"],
+        "--key",
+        str(Path(config["work"]) / "keys/adbkey"),
+        "--binary",
+        str(binary),
+        "--install",
+        "--autostart",
+    ]
     if config.get("serial"):
         args.extend(["--serial", config["serial"]])
     return module.main(args, log=log)

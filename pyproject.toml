@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["alice-homebrew", "native/upstream"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "SIM", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+# Message catalog: one translation pair per line reads better than wrapped strings.
+"station_root/i18n.py" = ["E501"]
+# In tests a separate `with self.assertRaises(...)` marks the exact call expected to fail.
+"tests/*" = ["SIM117"]

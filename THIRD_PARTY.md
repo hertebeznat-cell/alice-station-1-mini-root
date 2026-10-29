@@ -22,7 +22,7 @@
 
 ## Bundled Alice Homebrew
 
-The ARM64 Homebrew service includes wazero v1.12.0 (Apache-2.0), golang.org/x/sys v0.44.0 (BSD-3-Clause), and the Go runtime (BSD). Their full licenses and wazero NOTICE are distributed under alice-homebrew/licenses/. See alice-homebrew/THIRD_PARTY.md. Homebrew source is included in the source archive.
+The app installs the official Alice Homebrew release pinned in scripts/prepare-homebrew.py. Its ARM64 service includes wazero (Apache-2.0), golang.org/x/* modules (BSD-3-Clause), hashicorp/mdns and miekg/dns (MIT/BSD), the Go runtime (BSD) and an unmodified Mozilla CA PEM (MPL-2.0). The release's full license texts, the wazero NOTICE and its THIRD_PARTY.md are bundled with the app under alice-homebrew/. Complete Homebrew source, including the MPL-2.0 certificate file, is at https://github.com/hertebeznat-cell/alice-homebrew (tag matching the pinned version).
 
 
 ## Original application and source exceptions
@@ -30,7 +30,7 @@ The ARM64 Homebrew service includes wazero v1.12.0 (Apache-2.0), golang.org/x/sy
 Original application code is source-available under the proprietary terms in
 LICENSE. This does not restrict the independent MIT transport file
 station_root/usb_transport.py, the LGPL native helper/libwdi, libusb, or MIT
-Alice Homebrew. Their original notices remain in this source distribution.
+Alice Homebrew. Their original notices remain with this distribution.
 
 Complete libusb 1.0.26 and libwdi 1.5.1 source archives are included under
 native/upstream/; provenance and SHA-256 are recorded in SOURCES.json. The
@@ -40,4 +40,4 @@ venv and rebuild the application. The native driver helper can likewise be
 rebuilt with a modified libwdi and a regenerated SHA-256 manifest. Component
 licenses override the original application's restrictions where applicable.
 
-The bundled Homebrew 0.5.2 includes an unmodified Mozilla CA PEM under MPL-2.0. Source and license notices are in alice-homebrew/internal/homebrew/certs/ and alice-homebrew/licenses/mozilla-ca/. Those files retain MPL-2.0 independently of the original root application license.
+The Mozilla CA PEM inside the bundled Homebrew binary retains MPL-2.0 independently of the original root application license; see the Homebrew repository above for the file and its notices.

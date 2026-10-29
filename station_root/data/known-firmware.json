@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "about": "Firmware files Station Mini Root has verified on real Station Mini 1 (YNDX-0004) units. The image builder patches OTA only when the updater it finds is listed here; anything else stops the build before flashing. Add an entry only after checking the binary on a device.",
+  "updater_switcher": [
+    {
+      "sha256": "0cc051e648caff435b4bef9d1b310825093ab7ee04ec2db61672f9b7c1fe63cb",
+      "note": "First verified switcher: starts legacy --updatesd or the dedicated updater with --updater_gateway."
+    },
+    {
+      "sha256": "2e191284fb74678a3c62c7dc935fe7c4ceab24c8d7f07c24b82ccad379923930",
+      "note": "Firmware 1.305.4.16.3237824040.20250721: identical to the first switcher except its 20-byte GNU Build ID."
+    }
+  ],
+  "noupdate_script": {
+    "text": "#!/bin/sh\n# disabled by noupdate\nlogger -t noupdate \"OTA apply blocked\" 2>/dev/null\nexit 0\n",
+    "note": "Inert device_ota_update.sh left by the earlier noupdate patch; recognized so such units can be rooted."
+  }
+}

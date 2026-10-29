@@ -2,7 +2,6 @@ import io
 from contextlib import redirect_stdout
 import json
 import hashlib
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -73,15 +72,20 @@ class SupportLogsTests(unittest.TestCase):
             resources.mkdir()
             helper = resources / "station-driver-helper.exe"
             helper.write_bytes(b"test helper fixture")
-            helper.with_suffix(".json").write_text(json.dumps({"diagnostic_log": True,
-                "sha256": hashlib.sha256(helper.read_bytes()).hexdigest()}))
+            helper.with_suffix(".json").write_text(
+                json.dumps({"diagnostic_log": True, "sha256": hashlib.sha256(helper.read_bytes()).hexdigest()})
+            )
+
             def elevated(_helper, args):
                 Path(args[2]).write_text("wdi_install_driver: code=-9 pending\nSTATION_DRIVER_RESULT=-9\n")
                 return 1
+
             logs = []
-            with patch("station_root.dependencies.sys.platform", "win32"), \
-                 patch("station_root.dependencies.data_root", return_value=Path(folder) / "data"), \
-                 patch("station_root.dependencies.run_elevated", side_effect=elevated):
+            with (
+                patch("station_root.dependencies.sys.platform", "win32"),
+                patch("station_root.dependencies.data_root", return_value=Path(folder) / "data"),
+                patch("station_root.dependencies.run_elevated", side_effect=elevated),
+            ):
                 with self.assertRaisesRegex(RuntimeError, "exit=1"):
                     install_driver(Path(folder), "boot", logs.append)
             self.assertTrue(any("code=-9 pending" in line for line in logs))
@@ -96,10 +100,19 @@ class SupportLogsTests(unittest.TestCase):
             (vendor / "quasar.cfg").write_text(secret)
             (vendor / "updater_switcher").write_bytes(b"unknown switcher")
             (vendor / "version_full").write_text("1.2.3.20261028")
-            (vendor / "launch.json").write_text(json.dumps({"tasks": [
-                {"name": "updater_switcher", "path": "/system/vendor/quasar/updater_switcher",
-                 "arg": [secret]},
-            ]}))
+            (vendor / "launch.json").write_text(
+                json.dumps(
+                    {
+                        "tasks": [
+                            {
+                                "name": "updater_switcher",
+                                "path": "/system/vendor/quasar/updater_switcher",
+                                "arg": [secret],
+                            },
+                        ]
+                    }
+                )
+            )
             report = firmware_diagnostics(root, "0" * 64)
             self.assertFalse(report["switcher_hash_matches"])
             self.assertFalse(report["switcher_checks"][0]["arguments_match"])
@@ -112,6 +125,7 @@ class SupportLogsTests(unittest.TestCase):
             source, output = Path(folder) / "backup.bin", Path(folder) / "root.ubi"
             with source.open("wb") as stream:
                 stream.truncate(SYSTEM_SIZE)
+
             def extract(command, **_kwargs):
                 root = Path(command[command.index("-o") + 1]) / "123/rootfs"
                 vendor = root / "system/vendor/quasar"
@@ -119,13 +133,16 @@ class SupportLogsTests(unittest.TestCase):
                 (vendor / "launch.json").write_text('{"tasks": []}')
                 (vendor / "version_full").write_text("1.2.20261028")
                 return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-            with patch("station_root.image_builder.sys.platform", "linux"), \
-                 patch("station_root.image_builder.os.geteuid", return_value=0, create=True), \
-                 patch("station_root.image_builder.inspect_layout", return_value={}), \
-                 patch("station_root.image_builder.validate_public_key", return_value="public fixture"), \
-                 patch("station_root.image_builder.shutil.which", return_value="tool"), \
-                 patch("station_root.image_builder.subprocess.run", side_effect=extract) as child, \
-                 patch("station_root.image_builder.patch_rootfs", side_effect=RuntimeError("unknown OTA")):
+
+            with (
+                patch("station_root.image_builder.sys.platform", "linux"),
+                patch("station_root.image_builder.os.geteuid", return_value=0, create=True),
+                patch("station_root.image_builder.inspect_layout", return_value={}),
+                patch("station_root.image_builder.validate_public_key", return_value="public fixture"),
+                patch("station_root.image_builder.shutil.which", return_value="tool"),
+                patch("station_root.image_builder.subprocess.run", side_effect=extract) as child,
+                patch("station_root.image_builder.patch_rootfs", side_effect=RuntimeError("unknown OTA")),
+            ):
                 with redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError, "unknown OTA"):
                     build(source, Path(folder) / "fixture.pub", output)
             self.assertEqual(child.call_count, 1)  # Only extraction, no image creation or flashing.

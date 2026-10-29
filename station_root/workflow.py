@@ -4,7 +4,6 @@ import json
 import os
 import queue
 import shutil
-import socket
 import subprocess
 import sys
 import threading
@@ -13,11 +12,26 @@ from datetime import datetime
 from pathlib import Path
 
 from .image_builder import sha256, validate_public_key
-from .usb_transport import Transport, STOCK_SHA256, SYSTEM_SIZE
-from .environment import (prepare_environment, builder_ready, installed_distro,
-                          wsl_prefix, MANAGED_PYTHON, run_capture, external_process)
+from .usb_transport import Transport
+from .adb import NO_WINDOW, AdbSession, device_serials, is_station, run_hidden
+from .mini1 import MODEL, ROOT_MARKER, STOCK_SYSTEM_SHA256, SYSTEM_SIZE
+from .environment import (
+    prepare_environment,
+    builder_ready,
+    installed_distro,
+    wsl_prefix,
+    MANAGED_PYTHON,
+    run_capture,
+    external_process,
+)
 from . import homebrew
 from .process_output import iter_output
+
+
+# Seconds to wait for the speaker to boot and expose ADB root after flashing.
+ROOT_BOOT_TIMEOUT = 180
+KEYGEN_TIMEOUT = 30
+WSL_PATH_TIMEOUT = 90
 
 
 def resource_root():
@@ -27,8 +41,14 @@ def resource_root():
 def validate_image(image, public_key=None):
     image = Path(image)
     report = json.loads(image.with_suffix(".json").read_text(encoding="utf-8"))
-    required = {"format": 2, "model": "YNDX-0004", "partition": "system", "image_type": "normal",
-                "bytes": SYSTEM_SIZE, "patch": "persistent-usb-adb-v2"}
+    required = {
+        "format": 2,
+        "model": MODEL,
+        "partition": "system",
+        "image_type": "normal",
+        "bytes": SYSTEM_SIZE,
+        "patch": "persistent-usb-adb-v2",
+    }
     if any(report.get(k) != v for k, v in required.items()):
         raise ValueError("Образ не соответствует поддерживаемому профилю YNDX-0004")
     source_digest = report.get("source_sha256", "")
@@ -41,6 +61,7 @@ def validate_image(image, public_key=None):
             raise ValueError("Это не полный UBI-контейнер")
     if public_key:
         import hashlib
+
         digest = hashlib.sha256(validate_public_key(public_key).encode()).hexdigest()
         if digest != report.get("public_key_sha256"):
             raise ValueError("Образ собран с другим ADB-ключом")
@@ -82,6 +103,7 @@ class Workflow:
         if self.transport is None:
             return operation()
         stopped, errors = threading.Event(), []
+
         def poll():
             while not stopped.wait(0.4):
                 try:
@@ -89,6 +111,7 @@ class Workflow:
                 except Exception as exc:
                     errors.append(exc)
                     return
+
         thread = threading.Thread(target=poll, daemon=True)
         thread.start()
         try:
@@ -145,21 +168,28 @@ class Workflow:
             self.connect()
         backup, digest = self.backup(config["work"])
         # Keep a previous working rollback target if a reinstall fails to prepare.
-        self.save_session(config["work"], pending_backup=str(backup), pending_source_sha256=digest,
-                          pending_state="backed-up")
+        self.save_session(
+            config["work"], pending_backup=str(backup), pending_source_sha256=digest, pending_state="backed-up"
+        )
         job = dict(config, source=str(backup))
         image = self.host_operation(lambda: self.prepare(job))
         report = validate_image(image)
         if report["source_sha256"] != digest:
             raise ValueError("Prepared image does not match this backup")
-        self.save_session(config["work"], original_backup=str(backup), source_sha256=digest,
-                          image=str(image), state="prepared", restore_eligible=True,
-                          ota_disabled=report["ota_disabled"])
+        self.save_session(
+            config["work"],
+            original_backup=str(backup),
+            source_sha256=digest,
+            image=str(image),
+            state="prepared",
+            restore_eligible=True,
+            ota_disabled=report["ota_disabled"],
+        )
         self.flash(dict(job, image=str(image)), original=(backup, digest))
         self.save_session(config["work"], state="written-and-verified")
         self.reboot()
         self.log("Waiting for ADB after reboot...")
-        deadline = time.monotonic() + 180
+        deadline = time.monotonic() + ROOT_BOOT_TIMEOUT
         last_error = ""
         while time.monotonic() < deadline:
             try:
@@ -169,13 +199,16 @@ class Workflow:
                 last_error = str(exc)
                 self.cancel.wait(2)
         else:
-            raise RuntimeError("Firmware was written and read-back verified, but ADB root was not confirmed. " + last_error)
+            raise RuntimeError(
+                "Firmware was written and read-back verified, but ADB root was not confirmed. " + last_error
+            )
         self.save_session(config["work"], state="root-verified", serial=serial)
         self.finish_homebrew(dict(config, serial=serial))
 
     def update_homebrew(self, config):
         """Maintenance for an already rooted speaker; never captures or flashes."""
         from .dependencies import find_adb
+
         retry = dict(config)
         retry["adb"] = find_adb(retry.get("adb", ""))
         if not retry["adb"]:
@@ -194,8 +227,11 @@ class Workflow:
             url = homebrew.install(resource_root(), dict(config, adb=self.adb_binary(config)), self.log)
         except Exception as exc:
             self.save_session(config["work"], homebrew_error=str(exc))
-            raise RuntimeError("ADB root is confirmed. Homebrew installation failed: " + str(exc) +
-                               " Retry Install root to finish Homebrew without rewriting firmware.") from exc
+            raise RuntimeError(
+                "ADB root is confirmed. Homebrew installation failed: "
+                + str(exc)
+                + " Retry Install root to finish Homebrew without rewriting firmware."
+            ) from exc
         self.save_session(config["work"], state="root-and-homebrew-verified", homebrew_url=url, homebrew_error="")
         self.log("Installation complete. Root and Homebrew verified.")
         self.log("Homebrew: " + url)
@@ -219,9 +255,19 @@ class Workflow:
             if output.exists():
                 output.rename(output.with_suffix(".partial"))
             raise
-        output.with_suffix(".json").write_text(json.dumps({
-            "partition": "system", "bytes": SYSTEM_SIZE, "sha256": digest,
-            "identify": self.device().identify().hex(), "complete": True}, indent=2), encoding="utf-8")
+        output.with_suffix(".json").write_text(
+            json.dumps(
+                {
+                    "partition": "system",
+                    "bytes": SYSTEM_SIZE,
+                    "sha256": digest,
+                    "identify": self.device().identify().hex(),
+                    "complete": True,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         self.log("Копия сохранена. SHA-256: " + digest)
         return output, digest
 
@@ -232,6 +278,44 @@ class Workflow:
             raise RuntimeError("Укажите adb из Android SDK Platform-Tools")
         return str(Path(adb).resolve())
 
+    @staticmethod
+    def _workspace_key(work, adb):
+        """Create the workspace ADB key once; return its validated public half."""
+        key = work / "keys" / "adbkey"
+        key.parent.mkdir(parents=True, exist_ok=True)
+        if not key.exists():
+            run_hidden([adb, "keygen", str(key)], check=True, capture_output=True, timeout=KEYGEN_TIMEOUT)
+            if os.name != "nt":
+                key.chmod(0o600)
+        public = key.with_suffix(".pub")
+        validate_public_key(public)
+        return public
+
+    def _builder_command(self, config, source, public, output):
+        """Command that runs scripts/build_image.sh in Linux, or in WSL on Windows."""
+        script = resource_root() / "scripts" / "build_image.sh"
+        if sys.platform != "win32":
+            cmd = ["bash", str(script), str(source), str(public), str(output)]
+            if config.get("builder_python"):
+                cmd = ["env", "STATION_ROOT_PYTHON=" + config["builder_python"], *cmd]
+            return cmd
+        self.ensure_environment(config, setup_if_missing=False)
+        prefix = wsl_prefix(config["distro"])
+
+        def linux_path(path):
+            # Pass literal argv: no shell expansion of paths or user input.
+            code, out, error = run_capture(prefix + ["wslpath", "-a", "-u", str(path)], timeout=WSL_PATH_TIMEOUT)
+            if code:
+                raise RuntimeError("WSL path conversion failed: " + (error.strip() or out.strip()))
+            return out.strip()
+
+        return prefix + [
+            "env",
+            "STATION_ROOT_PYTHON=" + MANAGED_PYTHON,
+            "bash",
+            *(linux_path(path) for path in (script, source, public, output)),
+        ]
+
     def prepare(self, config):
         self.phase("build")
         source = Path(config["source"]).resolve()
@@ -240,16 +324,7 @@ class Workflow:
         if source.stat().st_size != SYSTEM_SIZE:
             raise ValueError("Expected a complete 80 MiB system backup")
         digest = sha256(source)
-        adb = self.adb_binary(config)
-        key = work / "keys" / "adbkey"
-        key.parent.mkdir(parents=True, exist_ok=True)
-        if not key.exists():
-            subprocess.run([adb, "keygen", str(key)], check=True, capture_output=True, timeout=30,
-                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            if os.name != "nt":
-                key.chmod(0o600)
-        public = key.with_suffix(".pub")
-        validate_public_key(public)
+        public = self._workspace_key(work, self.adb_binary(config))
         block_updates = bool(config.get("block_updates", True))
         output = work / f"system-root-{digest[:16]}-{'no-ota' if block_updates else 'ota'}.ubi"
         if output.exists():
@@ -258,24 +333,7 @@ class Workflow:
                 raise ValueError("Existing image has different build settings")
             self.log("Образ уже подготовлен и проверен: " + str(output))
             return output
-        script = resource_root() / "scripts" / "build_image.sh"
-        if sys.platform == "win32":
-            self.ensure_environment(config, setup_if_missing=False)
-            distro = config["distro"]
-            prefix = wsl_prefix(distro)
-            def linux_path(path):
-                # Pass literal argv: no shell expansion of paths or user input.
-                code, output, error = run_capture(prefix + ["wslpath", "-a", "-u", str(path)], timeout=90)
-                if code:
-                    raise RuntimeError("WSL path conversion failed: " + (error.strip() or output.strip()))
-                return output.strip()
-            cmd = prefix + ["env", "STATION_ROOT_PYTHON=" + MANAGED_PYTHON,
-                   "bash", linux_path(script), linux_path(source),
-                   linux_path(public), linux_path(output)]
-        else:
-            cmd = ["bash", str(script), str(source), str(public), str(output)]
-            if config.get("builder_python"):
-                cmd = ["env", "STATION_ROOT_PYTHON=" + config["builder_python"]] + cmd
+        cmd = self._builder_command(config, source, public, output)
         if not block_updates:
             cmd.append("--allow-ota")
         self.log("Подготовка образа в Linux / WSL. Личный ключ остаётся в рабочей папке.")
@@ -289,12 +347,15 @@ class Workflow:
         tail = []
         environment = os.environ.copy()
         self.log("Command: " + subprocess.list2cmdline([str(part) for part in cmd]))
-        process = external_process(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment,
-                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        process = external_process(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment, creationflags=NO_WINDOW
+        )
+
         def reader():
             for line in iter_output(process.stdout):
                 lines.put(line.rstrip())
             process.stdout.close()
+
         thread = threading.Thread(target=reader, daemon=True)
         thread.start()
         try:
@@ -309,8 +370,10 @@ class Workflow:
                     pass
                 self.heartbeat()
             if process.returncode:
-                raise RuntimeError("Сборка образа остановлена. Запись прошивки не начиналась. "
-                                   f"Exit code: {process.returncode}\n" + "\n".join(tail))
+                raise RuntimeError(
+                    "Сборка образа остановлена. Запись прошивки не начиналась. "
+                    f"Exit code: {process.returncode}\n" + "\n".join(tail)
+                )
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -334,8 +397,10 @@ class Workflow:
         self.log("Обратное чтение 80 МиБ и проверка SHA-256...")
         actual = self.device().read_system(readback, self.progress)
         if actual != report["image_sha256"]:
-            raise RuntimeError("SHA-256 записанного system не совпал. Не перезагружайте станцию. "
-                               "Сохранены исходная копия и обратное чтение: " + str(readback))
+            raise RuntimeError(
+                "SHA-256 записанного system не совпал. Не перезагружайте станцию. "
+                "Сохранены исходная копия и обратное чтение: " + str(readback)
+            )
         self.log("Запись и обратное чтение совпали. Можно нажать «Перезагрузить», затем «Проверить root».")
 
     def restore(self, config, backup):
@@ -343,9 +408,13 @@ class Workflow:
         digest = sha256(backup)
         if backup.stat().st_size != SYSTEM_SIZE:
             raise ValueError("Expected a complete 80 MiB system backup")
-        if digest != STOCK_SHA256:
+        if digest != STOCK_SYSTEM_SHA256:
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
-            if not metadata.get("complete") or metadata.get("partition") != "system" or metadata.get("sha256") != digest:
+            if (
+                not metadata.get("complete")
+                or metadata.get("partition") != "system"
+                or metadata.get("sha256") != digest
+            ):
                 raise ValueError("Backup checksum/provenance verification failed")
         self.backup(config["work"])
         self.log("Восстановление исходного system...")
@@ -376,100 +445,58 @@ class Workflow:
         self.log("Отправлен reset. Дождитесь обычной загрузки и появления ADB.")
 
     def verify(self, config, expected_ota=None):
-        adb = self.adb_binary(config)
+        """Confirm ADB root on the speaker; return its ADB serial."""
         key = Path(config["work"]).resolve() / "keys/adbkey"
         if not key.is_file():
             raise FileNotFoundError("Нет личного ключа. Укажите рабочую папку, где собирался образ.")
-        env = os.environ.copy()
-        env["ADB_VENDOR_KEYS"] = str(key)
-        # Reuse an already authorized speaker on the standard server. Opening a
-        # second server against the same legacy USB interface can hang. Never
-        # restart/stop the user's server; use the private-key server as fallback.
-        env.pop("ADB_SERVER_SOCKET", None)
-        owned = True
-        with socket.socket() as probe:
-            probe.settimeout(0.5)
-            standard_running = probe.connect_ex(("127.0.0.1", 5037)) == 0
-        if standard_running:
-            try:
-                result = subprocess.run([adb, "-P", "5037", "devices", "-l"], env=env,
-                    text=True, capture_output=True, timeout=5,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                for line in result.stdout.splitlines()[1:]:
-                    parts = line.split()
-                    if len(parts)<2 or parts[1]!="device" or (config.get("serial") and parts[0]!=config["serial"]):
-                        continue
-                    identity = subprocess.run([adb, "-P", "5037", "-s", parts[0], "shell", "cat /proc/device-tree/compatible"],
-                        env=env, text=True, capture_output=True, timeout=5,
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                    if identity.returncode==0 and "amlogic" in identity.stdout.lower():
-                        owned = False
-                        break
-            except (OSError, subprocess.TimeoutExpired):
-                pass
-        if owned:
-            env["ADB_SERVER_SOCKET"] = "tcp:localhost:5038"
-            with socket.socket() as probe:
-                probe.settimeout(0.5)
-                if probe.connect_ex(("127.0.0.1", 5038)) == 0:
-                    raise RuntimeError("Порт 5038 уже занят. Освободите его перед проверкой root.")
-        prefix = [adb, "-P", "5038" if owned else "5037"]
-        def run(args):
-            result = subprocess.run(prefix + args, env=env, text=True, capture_output=True,
-                                    timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            if result.returncode:
-                raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "Ошибка ADB")
-            return result.stdout
+        session = AdbSession.open(self.adb_binary(config), key, config.get("serial", ""))
         try:
-            listing = run(["devices", "-l"])
-            devices = [line.split()[0] for line in listing.splitlines()[1:]
-                       if len(line.split()) >= 2 and line.split()[1] == "device"]
-            if (not devices and sys.platform == "win32" and config.get("_managed_dependencies")
-                    and not config.get("_adb_driver_repair_attempted")):
-                # The normal ADB interface appears only after boot; repair only
-                # this speaker's actual ADB function, never its RNDIS parent.
-                from .dependencies import install_driver
-                config["_adb_driver_repair_attempted"] = True
-                install_driver(resource_root(), "adb", self.log)
-                raise RuntimeError("ADB driver prepared. Waiting for the speaker...")
-            serial = config.get("serial", "").strip()
-            if not serial:
-                if len(devices) > 1:
-                    matching = []
-                    for candidate in devices:
-                        try:
-                            identity = run(["-s", candidate, "shell", "cat /proc/device-tree/compatible"])
-                            if "amlogic" in identity.lower():
-                                matching.append(candidate)
-                        except RuntimeError:
-                            pass
-                    devices = matching
-                if len(devices) != 1:
-                    raise RuntimeError("Укажите серийный номер ADB. Список:\n" + listing)
-                serial = devices[0]
-            elif serial not in devices:
-                raise RuntimeError("Выбранное устройство не готово. Список:\n" + listing)
+            serial = self._select_station(session, config)
             # Identify the board before reporting root for an arbitrary Android phone.
-            compatible = run(["-s", serial, "shell", "cat /proc/device-tree/compatible"])
-            if "amlogic" not in compatible.lower():
+            if not is_station(session.shell(serial, "cat /proc/device-tree/compatible")):
                 raise RuntimeError("ADB-устройство не сообщает Amlogic compatible; проверьте серийный номер.")
-            result = run(["-s", serial, "shell", "id"])
-            self.log(result.strip())
-            if not any(part == "uid=0(root)" or part == "uid=0" for part in result.split()):
+            identity = session.shell(serial, "id")
+            self.log(identity.strip())
+            if not {"uid=0(root)", "uid=0"} & set(identity.split()):
                 raise RuntimeError("ADB доступен, но shell не имеет uid=0")
             if expected_ota:
-                marker = json.loads(run(["-s", serial, "shell", "cat /etc/station-mini-root.json"]))
-                if marker.get("ota_disabled") is not True:
-                    raise RuntimeError("Root works, but the OTA policy marker is missing")
-                processes = run(["-s", serial, "shell", "ps"])
-                if any("--updatesd" in line for line in processes.splitlines()):
-                    raise RuntimeError("Root works, but updatesd is still running")
-                self.log("OTA policy verified: updatesd is not running.")
+                self._check_ota_policy(session, serial)
             self.log("ROOT ПОДТВЕРЖДЁН: " + serial)
             return serial
         finally:
-            try:
-                if owned:
-                    run(["kill-server"])
-            except Exception:
-                pass
+            session.close()
+
+    def _select_station(self, session, config):
+        listing = session.run("devices", "-l")
+        devices = device_serials(listing)
+        if (
+            not devices
+            and sys.platform == "win32"
+            and config.get("_managed_dependencies")
+            and not config.get("_adb_driver_repair_attempted")
+        ):
+            # The normal ADB interface appears only after boot; repair only
+            # this speaker's actual ADB function, never its RNDIS parent.
+            from .dependencies import install_driver
+
+            config["_adb_driver_repair_attempted"] = True
+            install_driver(resource_root(), "adb", self.log)
+            raise RuntimeError("ADB driver prepared. Waiting for the speaker...")
+        serial = config.get("serial", "").strip()
+        if serial:
+            if serial not in devices:
+                raise RuntimeError("Выбранное устройство не готово. Список:\n" + listing)
+            return serial
+        if len(devices) > 1:
+            devices = session.stations(devices)
+        if len(devices) != 1:
+            raise RuntimeError("Укажите серийный номер ADB. Список:\n" + listing)
+        return devices[0]
+
+    def _check_ota_policy(self, session, serial):
+        marker = json.loads(session.shell(serial, "cat /" + ROOT_MARKER))
+        if marker.get("ota_disabled") is not True:
+            raise RuntimeError("Root works, but the OTA policy marker is missing")
+        if any("--updatesd" in line for line in session.shell(serial, "ps").splitlines()):
+            raise RuntimeError("Root works, but updatesd is still running")
+        self.log("OTA policy verified: updatesd is not running.")

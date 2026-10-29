@@ -1,9 +1,9 @@
 """Prepare a small Debian WSL builder; never modifies a station or removes a distro."""
+
 from __future__ import annotations
 
 import ctypes
 import os
-import platform
 import re
 import shlex
 import shutil
@@ -39,11 +39,17 @@ def external_process(command, **kwargs):
     if not frozen or sys.platform != "win32":
         return subprocess.Popen(command, **kwargs)
     import ntpath
+
     root = str(sys._MEIPASS)
     prefix = ntpath.normcase(ntpath.normpath(root))
-    env["PATH"] = ";".join(part for part in env.get("PATH", "").split(";")
-        if not (ntpath.normcase(ntpath.normpath(part)) == prefix or
-                ntpath.normcase(ntpath.normpath(part)).startswith(prefix + "\\")))
+    env["PATH"] = ";".join(
+        part
+        for part in env.get("PATH", "").split(";")
+        if not (
+            ntpath.normcase(ntpath.normpath(part)) == prefix
+            or ntpath.normcase(ntpath.normpath(part)).startswith(prefix + "\\")
+        )
+    )
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.SetDllDirectoryW.argtypes = [ctypes.c_wchar_p]
     kernel.SetDllDirectoryW.restype = ctypes.c_int
@@ -57,8 +63,12 @@ def external_process(command, **kwargs):
 
 
 def run_capture(command, timeout=60):
-    with external_process(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as process:
+    with external_process(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    ) as process:
         try:
             stdout, stderr = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -74,8 +84,11 @@ def list_distros():
     code, stdout, _ = run_capture(["wsl.exe", "--list", "--quiet"])
     if code:
         return []
-    return [line.strip().lstrip("*").strip() for line in stdout.splitlines()
-            if line.strip() and re.fullmatch(r"[\w. -]+", line.strip())]
+    return [
+        line.strip().lstrip("*").strip()
+        for line in stdout.splitlines()
+        if line.strip() and re.fullmatch(r"[\w. -]+", line.strip())
+    ]
 
 
 def default_distro():
@@ -84,6 +97,7 @@ def default_distro():
     try:
         import winreg
         import uuid
+
         path = r"Software\Microsoft\Windows\CurrentVersion\Lxss"
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:
             identifier = str(winreg.QueryValueEx(key, "DefaultDistribution")[0])
@@ -127,16 +141,22 @@ def discover_distros(preferred="", names=None):
             selected = name
             break
     available = [name for name in names if systems.get(name) == "compatible"]
-    return {"installed": names, "available": available, "selected": selected,
-            "unknown": [name for name in names if systems.get(name) == "unknown"],
-            "unchecked": [name for name in names if name not in systems]}
+    return {
+        "installed": names,
+        "available": available,
+        "selected": selected,
+        "unknown": [name for name in names if systems.get(name) == "unknown"],
+        "unchecked": [name for name in names if name not in systems],
+    }
 
 
 def installed_distro(preferred="", names=None):
     discovery = discover_distros(preferred, names)
     if not discovery["selected"] and discovery["unknown"]:
-        raise RuntimeError("Cannot inspect existing WSL distributions. Retry detection before installing another: "
-                           + ", ".join(discovery["unknown"]))
+        raise RuntimeError(
+            "Cannot inspect existing WSL distributions. Retry detection before installing another: "
+            + ", ".join(discovery["unknown"])
+        )
     return discovery["selected"]
 
 
@@ -158,15 +178,26 @@ def select_distro(names, preferred=""):
 def run_elevated(executable, arguments, visible=False):
     """UAC is handled by Windows, not accepted programmatically."""
     from ctypes import wintypes
+
     class SHELLEXECUTEINFOW(ctypes.Structure):
-        _fields_ = [("cbSize", wintypes.DWORD), ("fMask", ctypes.c_ulong),
-                    ("hwnd", wintypes.HWND), ("lpVerb", wintypes.LPCWSTR),
-                    ("lpFile", wintypes.LPCWSTR), ("lpParameters", wintypes.LPCWSTR),
-                    ("lpDirectory", wintypes.LPCWSTR), ("nShow", ctypes.c_int),
-                    ("hInstApp", wintypes.HINSTANCE), ("lpIDList", ctypes.c_void_p),
-                    ("lpClass", wintypes.LPCWSTR), ("hkeyClass", wintypes.HKEY),
-                    ("dwHotKey", wintypes.DWORD), ("hIcon", wintypes.HANDLE),
-                    ("hProcess", wintypes.HANDLE)]
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("fMask", ctypes.c_ulong),
+            ("hwnd", wintypes.HWND),
+            ("lpVerb", wintypes.LPCWSTR),
+            ("lpFile", wintypes.LPCWSTR),
+            ("lpParameters", wintypes.LPCWSTR),
+            ("lpDirectory", wintypes.LPCWSTR),
+            ("nShow", ctypes.c_int),
+            ("hInstApp", wintypes.HINSTANCE),
+            ("lpIDList", ctypes.c_void_p),
+            ("lpClass", wintypes.LPCWSTR),
+            ("hkeyClass", wintypes.HKEY),
+            ("dwHotKey", wintypes.DWORD),
+            ("hIcon", wintypes.HANDLE),
+            ("hProcess", wintypes.HANDLE),
+        ]
+
     info = SHELLEXECUTEINFOW()
     info.cbSize, info.fMask = ctypes.sizeof(info), 0x40
     info.lpVerb, info.lpFile = "runas", executable
@@ -215,8 +246,10 @@ def prepare_environment(config, log, run_process, resources):
             if code not in (0, 3010):
                 raise RuntimeError(f"WSL installer exited with code {code}")
             # Enabling optional Windows features can need reboot even on exit 0.
-            raise RestartRequired("WSL installation requested. Restart Windows if prompted, then run Setup again. "
-                                  "No firmware operation has started.")
+            raise RestartRequired(
+                "WSL installation requested. Restart Windows if prompted, then run Setup again. "
+                "No firmware operation has started."
+            )
     selected = installed_distro(str(config.get("distro", "")).strip(), names)
     if not selected:
         log("Installing Debian for WSL: no desktop, builder packages only.")
@@ -238,11 +271,17 @@ def prepare_environment(config, log, run_process, resources):
 def builder_ready(distro, strict=False, log=lambda message: None):
     # Explicit result markers distinguish missing packages from a failed WSL
     # launch. A launch timeout must never trigger another apt/distro install.
-    check = ("import ubireader; import shutil; "
-             "assert all(shutil.which(p) for p in ('mkfs.ubifs','ubinize','fakeroot'))")
-    script = ("if test -x " + shlex.quote(MANAGED_PYTHON) + " && " +
-              shlex.quote(MANAGED_PYTHON) + " -c " + shlex.quote(check) + "; then "
-              "printf '\\nSTATION_BUILDER_READY\\n'; else printf '\\nSTATION_BUILDER_MISSING\\n'; fi")
+    check = "import ubireader; import shutil; assert all(shutil.which(p) for p in ('mkfs.ubifs','ubinize','fakeroot'))"
+    script = (
+        "if test -x "
+        + shlex.quote(MANAGED_PYTHON)
+        + " && "
+        + shlex.quote(MANAGED_PYTHON)
+        + " -c "
+        + shlex.quote(check)
+        + "; then "
+        "printf '\\nSTATION_BUILDER_READY\\n'; else printf '\\nSTATION_BUILDER_MISSING\\n'; fi"
+    )
     log("Checking the selected WSL builder: " + distro)
     detail = ""
     for attempt in range(2):

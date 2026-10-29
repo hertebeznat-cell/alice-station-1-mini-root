@@ -1,4 +1,5 @@
 """Automatic local tool paths, verified ADB downloads and dependency readiness."""
+
 from __future__ import annotations
 
 import hashlib
@@ -18,9 +19,14 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from .environment import builder_ready, discover_distros, run_capture, MANAGED_PYTHON, run_elevated
+from .mini1 import USB_PRODUCT_ID, USB_VENDOR_ID
 from .usb_transport import make_backend, USBBackendError
 
-SDK_METADATA = "https://dl.google.com/android/repository/repository2-1.xml"
+SDK_HOST = "dl.google.com"
+SDK_REPOSITORY = f"https://{SDK_HOST}/android/repository/"
+SDK_METADATA = SDK_REPOSITORY + "repository2-1.xml"
+MAX_PLATFORM_TOOLS_ARCHIVE = 128 * 1024 * 1024
+MAX_PLATFORM_TOOLS_EXTRACTED = 512 * 1024 * 1024
 
 
 def data_root():
@@ -51,9 +57,40 @@ def find_adb(saved=""):
     candidates = [saved, shutil.which("adb")]
     root = data_root() / "tools"
     if root.exists():
-        candidates.extend(str(p) for p in root.glob("platform-tools-*/platform-tools/" +
-                          ("adb.exe" if sys.platform == "win32" else "adb")))
+        candidates.extend(
+            str(p)
+            for p in root.glob("platform-tools-*/platform-tools/" + ("adb.exe" if sys.platform == "win32" else "adb"))
+        )
     return next((str(Path(p).resolve()) for p in candidates if valid_adb(p)), "")
+
+
+def _stable_platform_tools(root):
+    """Platform-Tools packages on the stable channel."""
+    for package in root.findall(".//remotePackage"):
+        channel = package.find("channelRef")
+        if package.get("path") == "platform-tools" and (channel is None or channel.get("ref") == "channel-0"):
+            yield package
+
+
+def _archive_entry(archive):
+    """Validated download for one <archive>, or None when it has no checksum."""
+    complete = archive.find("complete")
+    checksum = complete.find("checksum") if complete is not None else None
+    if checksum is None:
+        return None
+    algorithm = checksum.get("type", "sha1").replace("-", "").lower()
+    digest = (checksum.text or "").strip().lower()
+    if algorithm not in ("sha1", "sha256") or len(digest) != hashlib.new(algorithm).digest_size * 2:
+        raise ValueError("Invalid Platform-Tools checksum in Google metadata")
+    int(digest, 16)
+    url = urllib.parse.urljoin(SDK_REPOSITORY, complete.findtext("url", ""))
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != SDK_HOST:
+        raise ValueError("Unexpected Platform-Tools download host")
+    size = int(complete.findtext("size", "0"))
+    if not 0 < size <= MAX_PLATFORM_TOOLS_ARCHIVE:
+        raise ValueError("Invalid Platform-Tools archive size")
+    return {"url": url, "algorithm": algorithm, "digest": digest, "bytes": size}
 
 
 def platform_tools_archive(xml_data, host):
@@ -61,45 +98,30 @@ def platform_tools_archive(xml_data, host):
     # Strip XML namespaces so Google's schema namespace version can change.
     for element in root.iter():
         element.tag = element.tag.rsplit("}", 1)[-1]
-    for package in root.findall(".//remotePackage"):
-        if package.get("path") != "platform-tools":
-            continue
-        channel = package.find("channelRef")
-        if channel is not None and channel.get("ref") != "channel-0":
-            continue
+    for package in _stable_platform_tools(root):
         for archive in package.findall("./archives/archive"):
-            if archive.findtext("host-os") != host:
-                continue
-            complete = archive.find("complete")
-            checksum = complete.find("checksum") if complete is not None else None
-            if complete is None or checksum is None:
-                continue
-            algorithm = checksum.get("type", "sha1").replace("-", "").lower()
-            digest = (checksum.text or "").strip().lower()
-            if algorithm not in ("sha1", "sha256") or len(digest) != hashlib.new(algorithm).digest_size * 2:
-                raise ValueError("Invalid Platform-Tools checksum in Google metadata")
-            int(digest, 16)
-            url = urllib.parse.urljoin("https://dl.google.com/android/repository/", complete.findtext("url", ""))
-            parsed = urllib.parse.urlparse(url)
-            if parsed.scheme != "https" or parsed.hostname != "dl.google.com":
-                raise ValueError("Unexpected Platform-Tools download host")
-            size = int(complete.findtext("size", "0"))
-            if not 0 < size <= 128 * 1024 * 1024:
-                raise ValueError("Invalid Platform-Tools archive size")
-            return {"url": url, "algorithm": algorithm, "digest": digest, "bytes": size}
+            entry = _archive_entry(archive) if archive.findtext("host-os") == host else None
+            if entry:
+                return entry
     raise RuntimeError("No stable Platform-Tools archive was found for this computer")
 
 
 def extract_tools(archive_path, destination):
     destination = Path(destination)
     with zipfile.ZipFile(archive_path) as archive:
-        if sum(member.file_size for member in archive.infolist()) > 512 * 1024 * 1024:
+        if sum(member.file_size for member in archive.infolist()) > MAX_PLATFORM_TOOLS_EXTRACTED:
             raise ValueError("Platform-Tools extraction size is too large")
         for member in archive.infolist():
             path = PurePosixPath(member.filename)
-            if (path.is_absolute() or ".." in path.parts or "\\" in member.filename or
-                    ":" in member.filename or not path.parts or path.parts[0] != "platform-tools" or
-                    stat.S_ISLNK(member.external_attr >> 16)):
+            if (
+                path.is_absolute()
+                or ".." in path.parts
+                or "\\" in member.filename
+                or ":" in member.filename
+                or not path.parts
+                or path.parts[0] != "platform-tools"
+                or stat.S_ISLNK(member.external_attr >> 16)
+            ):
                 raise ValueError("Unsafe path in Platform-Tools archive")
         archive.extractall(destination)
 
@@ -153,7 +175,8 @@ def driver_registered():
         return Path("/etc/udev/rules.d/70-station-mini-root.rules").is_file()
     try:
         import winreg
-        path = r"SYSTEM\CurrentControlSet\Enum\USB\VID_1B8E&PID_C003"
+
+        path = rf"SYSTEM\CurrentControlSet\Enum\USB\VID_{USB_VENDOR_ID:04X}&PID_{USB_PRODUCT_ID:04X}"
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path) as root:
             for index in range(winreg.QueryInfoKey(root)[0]):
                 with winreg.OpenKey(root, winreg.EnumKey(root, index)) as child:
@@ -189,14 +212,17 @@ def install_driver(resources, mode, log=print):
     finally:
         if diagnostic.is_file():
             from .environment import decode_output
+
             log("Driver installation log: " + str(diagnostic))
             # Keep the complete native log on disk; bound the GUI excerpt.
             detail = decode_output(diagnostic.read_bytes()[-65536:])
             for line in detail.splitlines()[-45:]:
                 log("WinUSB: " + line)
     if code:
-        raise RuntimeError(f"Speaker USB driver installation failed (exit={code}). "
-                           "Restart Windows and retry dependency setup. If it repeats, save the full log.")
+        raise RuntimeError(
+            f"Speaker USB driver installation failed (exit={code}). "
+            "Restart Windows and retry dependency setup. If it repeats, save the full log."
+        )
 
 
 class Dependencies:
@@ -223,18 +249,40 @@ class Dependencies:
         else:
             candidates = (MANAGED_PYTHON, str(Path.home() / ".local/share/station-mini-root/venv/bin/python"))
             result["builder_python"] = next((path for path in candidates if Path(path).is_file()), "")
-            builder = bool(result["builder_python"]) and run_capture([result["builder_python"], "-c",
-                "import ubireader; import shutil; assert shutil.which('mkfs.ubifs'); assert shutil.which('fakeroot')"])[0] == 0
+            builder = (
+                bool(result["builder_python"])
+                and run_capture(
+                    [
+                        result["builder_python"],
+                        "-c",
+                        "import ubireader; import shutil; "
+                        "assert shutil.which('mkfs.ubifs'); assert shutil.which('fakeroot')",
+                    ]
+                )[0]
+                == 0
+            )
         try:
             make_backend()
             library = True
         except Exception:
             library = False
         # Do not claim a new machine's USB setup is ready merely because a file exists.
-        ready = bool(result["adb"] and builder and library and recorded.get("usb_verified")
-                     and recorded.get("adb_driver_staged") and driver_registered())
-        return {"config": result, "discovery": discovery, "ready": ready,
-                "adb": bool(result["adb"]), "builder": bool(builder), "usb": ready}
+        ready = bool(
+            result["adb"]
+            and builder
+            and library
+            and recorded.get("usb_verified")
+            and recorded.get("adb_driver_staged")
+            and driver_registered()
+        )
+        return {
+            "config": result,
+            "discovery": discovery,
+            "ready": ready,
+            "adb": bool(result["adb"]),
+            "builder": bool(builder),
+            "usb": ready,
+        }
 
     def install(self, config):
         config = dict(config)
@@ -265,12 +313,18 @@ class Dependencies:
             if sys.platform != "win32" or exc.operation != "open_device":
                 raise
             self.workflow.close()
-            self.workflow.log("The speaker is visible, but Windows cannot open its USB driver. Repairing WinUSB once...")
+            self.workflow.log(
+                "The speaker is visible, but Windows cannot open its USB driver. Repairing WinUSB once..."
+            )
             install_driver(self.resources, "boot", self.workflow.log)
             self.workflow.log("Disconnect and reconnect the speaker USB cable now. Waiting with a fresh USB context...")
             self.workflow.connect()
         self.marker.parent.mkdir(parents=True, exist_ok=True)
-        self.marker.write_text(json.dumps({"format": 1, "usb_verified": True, "adb_driver_staged": True,
-                                          "distro": config.get("distro", "")}), encoding="utf-8")
+        self.marker.write_text(
+            json.dumps(
+                {"format": 1, "usb_verified": True, "adb_driver_staged": True, "distro": config.get("distro", "")}
+            ),
+            encoding="utf-8",
+        )
         self.workflow.log("All dependencies are ready. Root and restore are now available.")
         return config
