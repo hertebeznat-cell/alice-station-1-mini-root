@@ -4,6 +4,8 @@
 
 Программа получает **ADB root на Яндекс Станции Мини 1-го поколения** (YNDX-0004, Amlogic A113X) и ставит на неё [Alice Homebrew](https://github.com/hertebeznat-cell/alice-homebrew) — веб-панель с плагинами. Windows x64 и Linux x86_64, интерфейс на русском и английском.
 
+Форум: https://t.me/+Fo_cQdkLSH9mZmEy
+
 Другие модели станций программа не поддерживает и сама это проверяет.
 
 ## Как пользоваться
