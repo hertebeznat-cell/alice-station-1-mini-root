@@ -6,6 +6,8 @@ This step never changes the stock Alice startup hook or removes other apps.
 import importlib.util
 from pathlib import Path
 
+from .adb import STANDARD_PORT
+
 
 def resources(root):
     root = Path(root) / "alice-homebrew"
@@ -30,6 +32,8 @@ def install(root, config, log=print):
     args = [
         "--adb",
         config["adb"],
+        "--adb-port",
+        str(config.get("_adb_port", STANDARD_PORT)),
         "--key",
         str(Path(config["work"]) / "keys/adbkey"),
         "--binary",

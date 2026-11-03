@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 from . import __version__, mini1
-from .mini1 import KNOWN_NOUPDATE_SCRIPT, KNOWN_UPDATER_SWITCHER_HASHES, SYSTEM_SIZE
+from .mini1 import KNOWN_NOUPDATE_SCRIPT, SYSTEM_SIZE
 
 # UBIFS journal size used by the factory image (8 MiB).
 UBIFS_JOURNAL_BYTES = 8 * 1024 * 1024
@@ -94,8 +94,12 @@ def launcher_tasks(value):
             yield from launcher_tasks(child)
 
 
-def known_updater_switcher(root, task, tasks):
-    """The verified updater_switcher task, next to the platformd main task."""
+def is_updater_switcher(root, task, tasks):
+    """A separate OTA task next to platformd; its executable is not run or changed.
+
+    Removing the launcher task does not depend on the executable's build hash.
+    Firmware versions with this same layout do not need new allowlist entries.
+    """
     if (
         task.get("name") != "updater_switcher"
         or task.get("path") != mini1.UPDATER_SWITCHER
@@ -105,7 +109,7 @@ def known_updater_switcher(root, task, tasks):
     if not any(mini1.is_main_task(t, "--platformd") for t in tasks):
         return False
     binary = Path(root) / mini1.UPDATER_SWITCHER.lstrip("/")
-    return regular_file(binary) and sha256(binary) in KNOWN_UPDATER_SWITCHER_HASHES
+    return regular_file(binary)
 
 
 def firmware_diagnostics(root, source_hash):
@@ -113,11 +117,12 @@ def firmware_diagnostics(root, source_hash):
     root = Path(root)
     vendor = root / mini1.QUASAR
     report = {
-        "format": 1,
+        "format": 2,
         "builder_version": __version__,
         "source_sha256": source_hash,
         "stage": "rootfs-patch-failed",
         "firmware_written": False,
+        "switcher_hash_required": False,
     }
     for name in ("version_full", "launch.json", "updater_switcher"):
         path = vendor / name
@@ -146,7 +151,7 @@ def firmware_diagnostics(root, source_hash):
         for t in tasks
         if mini1.is_updater_task(t)
     ]
-    report["switcher_hash_matches"] = report["updater_switcher"].get("sha256") in KNOWN_UPDATER_SWITCHER_HASHES
+    report["switcher_layout_matches"] = any(is_updater_switcher(root, task, tasks) for task in tasks)
     return report
 
 
@@ -183,18 +188,18 @@ def known_noupdate_policy(root, tasks):
     return any(mini1.is_main_task(task, "--yandexmini") for task in tasks)
 
 
-def _verified_switchers(root, tasks):
-    """IDs of updater tasks; every one must be the verified switcher."""
+def _separate_switchers(root, tasks):
+    """IDs of separate OTA tasks; the independent voice platform must remain."""
     switchers = set()
     for task in filter(mini1.is_updater_task, tasks):
-        if not known_updater_switcher(root, task, tasks):
-            raise RuntimeError("Unknown updater task or switcher binary; OTA blocking is not confirmed")
+        if not is_updater_switcher(root, task, tasks):
+            raise RuntimeError("Unknown OTA launch layout or missing separate platformd; OTA blocking is not confirmed")
         switchers.add(id(task))
     return switchers
 
 
 def _drop_ota_tasks(data, switchers):
-    """Remove updatesd and verified switcher tasks in place; return (removed, retained)."""
+    """Remove updatesd and separate switcher tasks in place; return (removed, retained)."""
     removed, retained = [], []
 
     def is_ota(task):
@@ -237,7 +242,7 @@ def disable_ota(root):
     root = Path(root)
     launch = root / mini1.QUASAR / "launch.json"
     data = json.loads(launch.read_text(encoding="utf-8"))
-    switchers = _verified_switchers(root, list(launcher_tasks(data)))
+    switchers = _separate_switchers(root, list(launcher_tasks(data)))
     removed, retained = _drop_ota_tasks(data, switchers)
     noupdate = not removed and known_noupdate_policy(root, retained)
     if not removed and not noupdate:
@@ -249,7 +254,7 @@ def disable_ota(root):
     if noupdate:
         policy = "noupdate-v1"
     elif switchers:
-        policy = "stock-updater-switcher-v1"
+        policy = "updater-switcher-layout-v2"
     else:
         policy = "stock-updatesd"
     return {
@@ -341,7 +346,9 @@ def patch_rootfs(root, key_text, block_updates=True):
 
 RECOGNIZED_SOURCES = {
     "noupdate-v1": "Recognized the existing noupdate patch; preserving and completing the OTA block.",
-    "stock-updater-switcher-v1": "Recognized the verified updater_switcher; preserving platformd and other services.",
+    "updater-switcher-layout-v2": (
+        "Recognized the separate OTA task; preserving platformd without a firmware hash allowlist."
+    ),
 }
 
 

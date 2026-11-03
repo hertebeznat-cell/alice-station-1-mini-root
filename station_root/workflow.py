@@ -461,6 +461,7 @@ class Workflow:
                 raise RuntimeError("ADB доступен, но shell не имеет uid=0")
             if expected_ota:
                 self._check_ota_policy(session, serial)
+            config["_adb_port"] = session.port
             self.log("ROOT ПОДТВЕРЖДЁН: " + serial)
             return serial
         finally:

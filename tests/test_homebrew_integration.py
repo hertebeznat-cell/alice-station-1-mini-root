@@ -27,7 +27,9 @@ class HomebrewBundleTests(unittest.TestCase):
             patch.object(homebrew.importlib.util, "spec_from_file_location", return_value=spec),
             patch.object(homebrew.importlib.util, "module_from_spec", return_value=module),
         ):
-            url = homebrew.install("bundle", {"adb": "adb", "work": "workspace", "serial": "speaker"})
+            url = homebrew.install(
+                "bundle", {"adb": "adb", "work": "workspace", "serial": "speaker", "_adb_port": 5038}
+            )
         self.assertEqual(url, "http://192.0.2.10:8088")
         args = module.main.call_args.args[0]
         self.assertIn("--install", args)
@@ -35,3 +37,4 @@ class HomebrewBundleTests(unittest.TestCase):
         self.assertNotIn("--disable-alice", args)
         self.assertNotIn("--remove-apps", args)
         self.assertEqual(args[args.index("--serial") + 1], "speaker")
+        self.assertEqual(args[args.index("--adb-port") + 1], "5038")

@@ -1,8 +1,8 @@
 """What Station Mini Root knows about Station Mini 1 (YNDX-0004).
 
 Hardware facts and firmware layout live here, in one place, instead of being
-spread through the workflow. The list of verified firmware binaries is data:
-station_root/data/known-firmware.json.
+spread through the workflow. Legacy OTA patch data is stored in
+station_root/data/known-firmware.json; firmware binary hashes are not required.
 """
 
 from __future__ import annotations
@@ -45,7 +45,6 @@ def _known_firmware():
 
 
 _KNOWN = _known_firmware()
-KNOWN_UPDATER_SWITCHER_HASHES = frozenset(entry["sha256"] for entry in _KNOWN["updater_switcher"])
 KNOWN_NOUPDATE_SCRIPT = _KNOWN["noupdate_script"]["text"].encode()
 
 

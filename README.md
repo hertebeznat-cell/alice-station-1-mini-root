@@ -72,12 +72,21 @@ bash scripts/build_image.sh system-backup.bin /path/to/adbkey.pub output.ubi
 | Модуль | Что делает |
 | --- | --- |
 | `station_root/mini1.py` | Всё, что известно о Мини 1: USB ID, размер раздела, геометрия UBI, пути прошивки |
-| `station_root/data/known-firmware.json` | Белый список проверенных бинарников обновления |
+| `station_root/data/known-firmware.json` | Описание прежней заглушки noupdate; списка хешей прошивок нет |
 | `station_root/usb_transport.py` | Чтение и запись раздела system через загрузчик |
 | `station_root/image_builder.py` | Патч rootfs и сборка UBI (в Linux/WSL под fakeroot) |
 | `station_root/adb.py` | Проверка root по ADB, не трогая ваш ADB-сервер |
 | `station_root/workflow.py` | Порядок шагов: бэкап → образ → запись → проверка → Homebrew |
 | `station_root/gui.py` | Окно приложения |
+
+
+## Linux и Ubuntu Live
+
+Автоматическая установка Linux-зависимостей сейчас рассчитана на **Ubuntu / Debian с apt-get**. Готовая Linux x86_64 сборка собирается в Ubuntu 24.04 (glibc 2.39). Автоматическая настройка Fedora, Arch и SteamOS пока не поддерживается; наличие вручную установленных пакетов не делает текущий установщик универсальным.
+
+Если Windows/WSL или WinUSB не удаётся настроить, можно загрузить Ubuntu Live с USB-накопителя, выбрать пробный запуск без установки ОС на диск, распаковать Linux-сборку и пройти «Установить зависимости» → «Установить root». Сохраните рабочую папку с бэкапом и ключами на постоянный носитель до выхода из Live-сеанса. Этот способ помог автору issue #5; он не доказывает исправление Windows-драйвера.
+
+Проверка `updater_switcher` по списку хешей снята: совместимость определяется структурой запуска, подробнее в [описании прошивок](docs/FIRMWARE.md).
 
 ## Лицензии
 

@@ -4,6 +4,22 @@ import re
 
 PAIRS = [
     (
+        "Recognized the separate OTA task; preserving platformd without a firmware hash allowlist.",
+        "Распознана отдельная задача OTA; сохраняю platformd без списка хешей прошивок.",
+    ),
+    (
+        "Unknown OTA launch layout or missing separate platformd; OTA blocking is not confirmed",
+        "Неизвестная схема запуска OTA или нет отдельного platformd; блокировка OTA не подтверждена",
+    ),
+    (
+        "The USB driver helper or manifest is missing. Fully extract StationMiniRoot-windows-x64.zip "
+        "from the official release and run StationMiniRoot.exe. Do not rename other files to .exe or .json. "
+        "Check the antivirus quarantine if files disappear.",
+        "Не найден USB-помощник или его манифест. Полностью распакуйте StationMiniRoot-windows-x64.zip "
+        "из официального релиза и запустите StationMiniRoot.exe. Не переименовывайте другие файлы в .exe или .json. "
+        "Если файлы исчезают, проверьте карантин антивируса.",
+    ),
+    (
         "Recognized the verified updater_switcher; preserving platformd and other services.",
         "Распознан проверенный updater_switcher; сохраняю platformd и остальные службы.",
     ),

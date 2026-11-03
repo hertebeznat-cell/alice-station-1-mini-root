@@ -70,12 +70,21 @@ bash scripts/build_image.sh system-backup.bin /path/to/adbkey.pub output.ubi
 | Module | Purpose |
 | --- | --- |
 | `station_root/mini1.py` | Everything known about the Mini 1: USB IDs, partition size, UBI geometry, firmware paths |
-| `station_root/data/known-firmware.json` | Allowlist of verified updater binaries |
+| `station_root/data/known-firmware.json` | Legacy noupdate patch data; no firmware hash allowlist |
 | `station_root/usb_transport.py` | Reading and writing the system partition through the bootloader |
 | `station_root/image_builder.py` | Rootfs patch and UBI build (Linux/WSL, under fakeroot) |
 | `station_root/adb.py` | Root check over ADB without touching your ADB server |
 | `station_root/workflow.py` | Step order: backup → image → write → verify → Homebrew |
 | `station_root/gui.py` | Application window |
+
+
+## Linux and Ubuntu Live
+
+Automatic dependency setup currently targets **Ubuntu / Debian with apt-get**. The Linux x86_64 release is built on Ubuntu 24.04 (glibc 2.39). Fedora, Arch and SteamOS automatic setup is not yet supported.
+
+If Windows/WSL or WinUSB setup fails, Ubuntu Live can provide an alternative: boot the USB image in try-without-installing mode, extract the Linux release, then run dependency setup and root installation. Save the workspace, backup and ADB key to persistent storage before ending the live session. This workaround was reported in issue #5; it does not establish that the Windows driver problem is fixed.
+
+Firmware version numbers and updater executable hashes no longer gate the patch; see [launcher compatibility](docs/FIRMWARE.md).
 
 ## Licenses
 

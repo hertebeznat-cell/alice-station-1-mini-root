@@ -195,6 +195,12 @@ def install_driver(resources, mode, log=print):
     if sys.platform != "win32" or mode not in ("boot", "adb"):
         raise ValueError("Unsupported driver setup request")
     helper = Path(resources) / "resources/station-driver-helper.exe"
+    if not helper.is_file() or not helper.with_suffix(".json").is_file():
+        raise RuntimeError(
+            "The USB driver helper or manifest is missing. Fully extract StationMiniRoot-windows-x64.zip "
+            "from the official release and run StationMiniRoot.exe. Do not rename other files to .exe or .json. "
+            "Check the antivirus quarantine if files disappear."
+        )
     manifest = json.loads((helper.with_suffix(".json")).read_text(encoding="utf-8"))
     with helper.open("rb") as stream:
         actual = hashlib.file_digest(stream, "sha256").hexdigest()

@@ -7,6 +7,22 @@ from station_root.workflow import Workflow
 
 
 class ExistingADBTests(unittest.TestCase):
+    def test_private_root_session_passes_its_port_to_homebrew_config(self):
+        with tempfile.TemporaryDirectory() as folder:
+            key = Path(folder) / "keys/adbkey"
+            key.parent.mkdir()
+            key.write_text("test-only")
+            flow = Workflow(log=lambda line: None)
+            flow.adb_binary = Mock(return_value="adb")
+            session = Mock(port=5038)
+            session.run.return_value = "List of devices attached\nspeaker device\n"
+            session.shell.side_effect = ["amlogic", "uid=0(root) gid=0(root)"]
+            config = {"work": folder}
+            with patch("station_root.workflow.AdbSession.open", return_value=session):
+                self.assertEqual(flow.verify(config), "speaker")
+            self.assertEqual(config["_adb_port"], 5038)
+            session.close.assert_called_once()
+
     def test_authorized_standard_server_is_reused_and_never_stopped(self):
         with tempfile.TemporaryDirectory() as folder:
             key = Path(folder) / "keys/adbkey"

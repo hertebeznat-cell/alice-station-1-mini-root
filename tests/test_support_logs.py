@@ -66,6 +66,16 @@ class SupportLogsTests(unittest.TestCase):
             self.assertIn("Полный журнал", text)
             self.assertIn("last line", text)
 
+    def test_missing_driver_resources_explain_which_ready_to_run_package_is_needed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with (
+                patch("station_root.dependencies.sys.platform", "win32"),
+                patch("station_root.dependencies.run_elevated") as elevated,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "StationMiniRoot-windows-x64.zip"):
+                    install_driver(Path(folder), "boot")
+            elevated.assert_not_called()
+
     def test_native_driver_failure_exposes_details_and_keeps_log(self):
         with tempfile.TemporaryDirectory() as folder:
             resources = Path(folder) / "resources"
@@ -114,7 +124,8 @@ class SupportLogsTests(unittest.TestCase):
                 )
             )
             report = firmware_diagnostics(root, "0" * 64)
-            self.assertFalse(report["switcher_hash_matches"])
+            self.assertFalse(report["switcher_layout_matches"])
+            self.assertFalse(report["switcher_hash_required"])
             self.assertFalse(report["switcher_checks"][0]["arguments_match"])
             self.assertEqual(report["version_full"]["version"], "1.2.3.20261028")
             self.assertNotIn(secret, json.dumps(report))
