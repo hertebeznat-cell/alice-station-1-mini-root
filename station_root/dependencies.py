@@ -127,7 +127,7 @@ def extract_tools(archive_path, destination):
 
 
 def download_adb(log=print, progress=lambda n, total: None):
-    host = "windows" if sys.platform == "win32" else "linux"
+    host = {"win32": "windows", "darwin": "macosx"}.get(sys.platform, "linux")
     if host == "linux" and __import__("platform").machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Install adb from your distribution on non-x86 Linux")
     request = urllib.request.Request(SDK_METADATA, headers={"User-Agent": "StationMiniRoot/0.3"})
@@ -171,6 +171,8 @@ def download_adb(log=print, progress=lambda n, total: None):
 
 
 def driver_registered():
+    if sys.platform == "darwin":
+        return True  # macOS uses libusb without a separately installed driver.
     if sys.platform != "win32":
         return Path("/etc/udev/rules.d/70-station-mini-root.rules").is_file()
     try:
@@ -202,8 +204,7 @@ def install_driver(resources, mode, log=print):
             "Check the antivirus quarantine if files disappear."
         )
     manifest = json.loads((helper.with_suffix(".json")).read_text(encoding="utf-8"))
-    with helper.open("rb") as stream:
-        actual = hashlib.file_digest(stream, "sha256").hexdigest()
+    actual = hashlib.sha256(helper.read_bytes()).hexdigest()
     if manifest.get("sha256") != actual:
         raise ValueError("Driver helper integrity check failed")
     dest = data_root() / "drivers" / mode
@@ -250,7 +251,11 @@ class Dependencies:
             recorded = json.loads(self.marker.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             recorded = {}
-        if sys.platform == "win32":
+        if sys.platform == "darwin":
+            from .mac_builder import ready as mac_builder_ready
+
+            builder = mac_builder_ready()
+        elif sys.platform == "win32":
             builder = bool(result.get("distro")) and builder_ready(result["distro"])
         else:
             candidates = (MANAGED_PYTHON, str(Path.home() / ".local/share/station-mini-root/venv/bin/python"))
@@ -293,7 +298,11 @@ class Dependencies:
     def install(self, config):
         config = dict(config)
         config["adb"] = find_adb(config.get("adb", "")) or download_adb(self.workflow.log, self.workflow.progress)
-        if sys.platform == "win32":
+        if sys.platform == "darwin":
+            from .mac_builder import setup
+
+            setup(self.resources, self.workflow._build_process)
+        elif sys.platform == "win32":
             self.workflow.ensure_environment(config)
             if not driver_registered():
                 install_driver(self.resources, "boot", self.workflow.log)

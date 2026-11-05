@@ -97,7 +97,7 @@ PAIRS = [
         "First install dependencies. Then choose root or restore. All paths are automatic.",
         "Сначала установите зависимости. Затем выберите root или восстановление. Все пути определяются автоматически.",
     ),
-    ("Looking for installed tools and WSL...", "Поиск установленных инструментов и WSL..."),
+    ("Looking for installed tools...", "Поиск установленных инструментов..."),
     ("1. Install all dependencies", "1. Установить зависимости"),
     ("2. Install root", "2. Установить root"),
     ("3. Restore backup", "3. Восстановить бэкап"),
@@ -141,7 +141,10 @@ PAIRS = [
     ("ADB driver prepared. Waiting for the speaker...", "Драйвер ADB подготовлен. Ожидание колонки..."),
     ("USB connection lost during host preparation: ", "USB-связь потеряна во время подготовки на компьютере: "),
     ("Language", "Язык"),
-    ("Yandex Station Mini 1 · YNDX-0004 · Windows / Linux", "Яндекс Станция Мини 1 · YNDX-0004 · Windows / Linux"),
+    (
+        "Yandex Station Mini 1 · YNDX-0004 · Windows / Linux / macOS",
+        "Яндекс Станция Мини 1 · YNDX-0004 · Windows / Linux / macOS",
+    ),
     (
         "Start the operation, then connect USB. No speaker buttons are required.",
         "Запустите операцию, затем подключите USB. Кнопки на колонке зажимать не нужно.",

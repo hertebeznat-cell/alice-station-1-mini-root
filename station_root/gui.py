@@ -99,7 +99,7 @@ class App:
         self.language_choice.set("Русский" if self.language == "ru" else "English")
         self.language_choice.pack(side="right")
         self.language_choice.bind("<<ComboboxSelected>>", self.change_language)
-        ttk.Label(frame, text=self.text("Yandex Station Mini 1 · YNDX-0004 · Windows / Linux")).pack(
+        ttk.Label(frame, text=self.text("Yandex Station Mini 1 · YNDX-0004 · Windows / Linux / macOS")).pack(
             anchor="w", pady=(6, 12)
         )
         ttk.Label(
@@ -107,7 +107,7 @@ class App:
             text=self.text("First install dependencies. Then choose root or restore. All paths are automatic."),
             wraplength=780,
         ).pack(anchor="w")
-        self.discovery_text = tk.StringVar(value=self.text("Looking for installed tools and WSL..."))
+        self.discovery_text = tk.StringVar(value=self.text("Looking for installed tools..."))
         ttk.Label(frame, textvariable=self.discovery_text, wraplength=780, foreground="#4a6678").pack(
             anchor="w", pady=10
         )
@@ -146,7 +146,7 @@ class App:
             foreground="#945400",
         ).pack(anchor="w", pady=(5, 12))
         self.status = tk.StringVar(
-            value=self.text("Looking for installed tools and WSL...") if self.inspect_pending else self.text("Ready")
+            value=self.text("Looking for installed tools...") if self.inspect_pending else self.text("Ready")
         )
         row = ttk.Frame(frame)
         row.pack(fill="x")
