@@ -127,6 +127,11 @@ class Workflow:
         return prepare_environment(config, self.log, self._build_process, resource_root())
 
     def ensure_environment(self, config, setup_if_missing=True):
+        if sys.platform == "darwin":
+            from .mac_builder import ready
+
+            if not ready():
+                raise RuntimeError("Start Docker Desktop and install the macOS builder first.")
         if sys.platform == "win32":
             # Dependency setup already selected this distro. Root must not
             # launch every other WSL installation just to rediscover it.
@@ -294,6 +299,10 @@ class Workflow:
     def _builder_command(self, config, source, public, output):
         """Command that runs scripts/build_image.sh in Linux, or in WSL on Windows."""
         script = resource_root() / "scripts" / "build_image.sh"
+        if sys.platform == "darwin":
+            from .mac_builder import command
+
+            return command(resource_root(), source, public, output)
         if sys.platform != "win32":
             cmd = ["bash", str(script), str(source), str(public), str(output)]
             if config.get("builder_python"):

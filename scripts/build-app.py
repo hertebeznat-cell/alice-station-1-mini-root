@@ -9,6 +9,12 @@ import json
 import tempfile
 from pathlib import Path
 
+if sys.platform == "darwin":
+    import tkinter
+
+    if sys.version_info < (3, 13) or tkinter.TkVersion < 8.6:
+        raise RuntimeError("macOS builds require Python 3.13+ with Tk 8.6 or newer")
+
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
 # PyInstaller treats missing optional imports as warnings and can otherwise
@@ -28,8 +34,8 @@ except Exception as exc:
         "build interpreter before retrying: " + str(exc)
     ) from exc
 separator = os.pathsep
-platform = "windows" if sys.platform == "win32" else "linux"
-dist = root / "dist" if platform == "windows" else root / "dist/linux"
+platform = {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux")
+dist = root / "dist" if platform == "windows" else root / "dist" / platform
 if os.environ.get("STATION_ROOT_DIST_DIR"):
     dist = Path(os.environ["STATION_ROOT_DIST_DIR"])
 homebrew = root / "alice-homebrew"
@@ -87,13 +93,18 @@ subprocess.run(
     check=True,
 )
 
+# PyInstaller re-signs macOS dylibs, changing their bytes. Verify presence there
+# and test the extracted library below; other platforms also compare its hash.
 # Check the actual artifact, not the developer's Python environment. Loading
 # libusb initializes a host context but does not enumerate or open USB devices.
 
 binary = dist / ("StationMiniRoot.exe" if platform == "windows" else "StationMiniRoot")
 archive = CArchiveReader(str(binary))
 member = next((name for name in archive.toc if name.replace("\\", "/") == "libusb_package/" + library.name), None)
-if member is None or hashlib.sha256(archive.extract(member)).digest() != hashlib.sha256(library.read_bytes()).digest():
+if member is None or (
+    platform != "macos"
+    and hashlib.sha256(archive.extract(member)).digest() != hashlib.sha256(library.read_bytes()).digest()
+):
     raise RuntimeError("The built application is missing the expected bundled libusb library")
 with tempfile.TemporaryDirectory(prefix="station-root-check-") as temporary:
     report = Path(temporary) / "usb.json"
@@ -109,4 +120,15 @@ with tempfile.TemporaryDirectory(prefix="station-root-check-") as temporary:
         or not Path(result["library"]).resolve().is_relative_to(Path(result["bundle_root"]).resolve())
     ):
         raise RuntimeError("The built application's USB self-check failed: " + str(result))
-print("Built application: bundled libusb SHA-256 and frozen USB self-check PASS", flush=True)
+if platform == "macos":
+    with tempfile.TemporaryDirectory(prefix="station-root-gui-check-") as temporary:
+        report = Path(temporary) / "gui.json"
+        check_env = os.environ.copy()
+        check_env["STATION_ROOT_DATA_DIR"] = str(Path(temporary) / "data")
+        check_env["STATION_ROOT_CONFIG_DIR"] = str(Path(temporary) / "config")
+        subprocess.run([str(binary), "--check-gui", str(report)], check=True, timeout=60, env=check_env)
+        result = json.loads(report.read_text(encoding="utf-8"))
+        if not result.get("mapped") or result.get("buttons") != 3 or result.get("tk", 0) < 8.6:
+            raise RuntimeError("The built application's GUI self-check failed: " + str(result))
+    print("Built application: GUI event loop and controls PASS", flush=True)
+print("Built application: bundled libusb and frozen USB self-check PASS", flush=True)

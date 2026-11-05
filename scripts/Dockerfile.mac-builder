@@ -1,0 +1,4 @@
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv mtd-utils fakeroot && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/mini && /opt/mini/bin/pip install ubi-reader==0.8.14
+WORKDIR /src

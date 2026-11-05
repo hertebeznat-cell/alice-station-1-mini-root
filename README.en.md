@@ -93,3 +93,11 @@ The original code is source-available under [proprietary terms](LICENSE): the of
 The USB transport (MIT, based on pyamlboot), WinUSB helper and libusb (LGPL), Alice Homebrew (MIT) and other components keep their own licenses: [THIRD_PARTY.md](THIRD_PARTY.md), `licenses/`, `native/upstream/`.
 
 Yandex firmware, built images, keys and dumps are not part of the repository or releases.
+
+## macOS (experimental)
+
+The macOS port uses host USB and Docker Desktop for the Linux image builder. One complete write and root verification was performed on Apple Silicon; Intel Macs, other firmware and macOS restore have not been tested. Keep the workspace and its private ADB key and backup; do not disconnect USB or power during writing or read-back.
+
+Install and start Docker Desktop, launch StationMiniRoot, install dependencies and reconnect the speaker when prompted. Allow the macOS accessory prompt. Then select Install root after confirming YNDX-0004. Docker image setup and the verified Google Platform-Tools download require Internet; the image build runs without network access.
+
+Build from source with Python 3.13+ and Tk 8.6 or newer: `pip install -r requirements.txt pyinstaller`, `python scripts/prepare-homebrew.py`, then `python scripts/build-app.py`. The result is in `dist/macos`. The application is unsigned and not notarized; Docker Desktop is not bundled.

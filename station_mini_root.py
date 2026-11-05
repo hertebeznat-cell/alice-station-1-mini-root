@@ -40,7 +40,31 @@ def check_wsl(distro, report_path):
     return 0 if report["ready"] else 1
 
 
+def check_gui(report_path):
+    """Exercise the frozen GUI event loop without device access."""
+    import json
+    import tkinter as tk
+    from pathlib import Path
+    from station_root.gui import App
+
+    root = tk.Tk()
+    app = App(root)
+
+    def finish():
+        root.update_idletasks()
+        report = {"mapped": bool(app.frame.winfo_ismapped()), "buttons": len(app.buttons), "tk": tk.TkVersion}
+        Path(report_path).write_text(json.dumps(report), encoding="utf-8")
+        app.jobs.put(("shutdown", {}))
+        root.destroy()
+
+    root.after(1000, finish)
+    root.mainloop()
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--check-gui":
+        raise SystemExit(check_gui(sys.argv[2]))
     if len(sys.argv) == 3 and sys.argv[1] == "--check-usb":
         raise SystemExit(check_usb(sys.argv[2]))
     if len(sys.argv) == 4 and sys.argv[1] == "--check-wsl":
