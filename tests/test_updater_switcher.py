@@ -62,6 +62,21 @@ class UpdaterSwitcherTests(unittest.TestCase):
             self.assertIn("exit 78", (vendor / "device_ota_update.sh").read_text())
             self.assertIn("exit 78", (vendor / "a01localupdate").read_text())
 
+    def test_platform_started_as_yandexmini_is_recognized(self):
+        """2022-2023 builds start the platform as --yandexmini and have no --platformd task."""
+        with tempfile.TemporaryDirectory() as folder:
+            root, vendor, data = self.fixture(folder)
+            data["nodes"][0]["tasks"][1]["arg"] = ["--yandexmini"]
+            (vendor / "launch.json").write_text(json.dumps(data), encoding="utf-8")
+            expected = copy.deepcopy(data)
+            expected["nodes"][0]["tasks"].pop(2)
+            self.assertTrue(firmware_diagnostics(root, "0" * 64)["switcher_layout_matches"])
+            policy = disable_ota(root)
+            self.assertEqual(json.loads((vendor / "launch.json").read_text()), expected)
+            self.assertEqual(policy["removed_tasks"], ["updater_switcher"])
+            self.assertEqual(policy["source_policy"], "updater-switcher-layout-v2")
+            self.assertIn("exit 78", (vendor / "device_ota_update.sh").read_text())
+
     def test_unknown_task_name_is_rejected_without_writes(self):
         with tempfile.TemporaryDirectory() as folder:
             root, vendor, data = self.fixture(folder)

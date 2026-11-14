@@ -53,6 +53,17 @@ def is_main_task(task, argument):
     return task.get("name") == "maind" and task.get("path") == MAIND and task.get("arg") == [argument]
 
 
+# The Alice platform (voice) process. Newer builds start it as a separate
+# "maind --platformd" task; 2022-2023 Mini 1 builds start the same platform as
+# "maind --yandexmini" and have no --platformd task at all.
+PLATFORM_FLAGS = ("--platformd", "--yandexmini")
+
+
+def is_platform_task(task):
+    """The Alice platform started as its own task, by either known flag."""
+    return any(is_main_task(task, flag) for flag in PLATFORM_FLAGS)
+
+
 def is_updater_task(task):
     path = task.get("path", "")
     return task.get("name") in {"updater", "updater_switcher"} or (

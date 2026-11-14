@@ -106,7 +106,7 @@ def is_updater_switcher(root, task, tasks):
         or task.get("arg") != mini1.SWITCHER_ARGS
     ):
         return False
-    if not any(mini1.is_main_task(t, "--platformd") for t in tasks):
+    if not any(mini1.is_platform_task(t) for t in tasks):
         return False
     binary = Path(root) / mini1.UPDATER_SWITCHER.lstrip("/")
     return regular_file(binary)
@@ -141,7 +141,7 @@ def firmware_diagnostics(root, source_hash):
     except (ValueError, RuntimeError):
         report["launch_parse_failed"] = True
         return report
-    report["platformd_main_matches"] = any(mini1.is_main_task(t, "--platformd") for t in tasks)
+    report["platformd_main_matches"] = any(mini1.is_platform_task(t) for t in tasks)
     report["switcher_checks"] = [
         {
             "name_matches": t.get("name") == "updater_switcher",
