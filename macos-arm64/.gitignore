@@ -1,0 +1,11 @@
+.DS_Store
+*.bin
+*.ubi
+*.yampkg
+*.zip
+*.tar.gz
+adbkey
+adbkey.pub
+config.env
+mini-usb
+.lock
